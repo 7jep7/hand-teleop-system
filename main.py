@@ -28,7 +28,7 @@ def make_target_transform(pos: np.ndarray, rot: np.ndarray) -> np.ndarray:
 
 
 def main(quiet=False, fps=60, test_joint=True, model: ModelName = "wilor", cam_idx=0, hand="right", use_scroll=False):
-    urdf_path = "so100" if test_joint else None
+    urdf_path = "so101" if test_joint else None
     tracker = HandTracker(
         cam_idx=cam_idx,
         hand=hand,

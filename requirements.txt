@@ -1,0 +1,15 @@
+# Core dependencies
+numpy>=1.23.0
+opencv-python
+matplotlib
+scipy
+pynput
+pydantic<2.0
+
+# Hand tracking models
+git+https://github.com/Joeclinton1/WiLoR-mini  # Wilor (GPU-based)
+mediapipe  # MediaPipe (CPU-based, experimental)
+pupil-apriltags  # AprilTag (experimental)
+
+# Optional: for kinematics (install via conda)
+# pinocchio
