@@ -28,6 +28,7 @@ My fork is outdated now, and I am working to get it working with the newest veri
 ### ✅ Recommended (Wilor – GPU-based, CUDA required)
 
 ```bash
+
 pip install "hand-teleop @ git+https://github.com/joeclinton1/hand-teleop.git#egg=hand-teleop[wilor]"
 ```
 
