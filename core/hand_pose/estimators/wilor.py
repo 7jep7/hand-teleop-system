@@ -5,8 +5,8 @@ from wilor_mini.pipelines.wilor_hand_pose3d_estimation_pipeline import (
     WiLorHandPose3dEstimationPipeline,
 )
 
-from hand_teleop.hand_pose.estimators.base import HandPoseEstimator
-from hand_teleop.hand_pose.types import HandKeypointsPred, TrackedHandKeypoints
+from core.hand_pose.estimators.base import HandPoseEstimator
+from core.hand_pose.types import HandKeypointsPred, TrackedHandKeypoints
 
 
 class WiLorEstimator(HandPoseEstimator):

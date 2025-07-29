@@ -17,17 +17,17 @@ def _lazy_import(module_path: str, class_name: str, install_hint: str) -> Callab
 
 _REGISTRY: dict[str, Callable] = {
     "wilor": _lazy_import(
-        "hand_teleop.hand_pose.estimators.wilor",
+        "core.hand_pose.estimators.wilor",
         "WiLorEstimator",
         "pip install 'https://github.com/Joeclinton1/WiLoR-mini'"
     ),
     "mediapipe": _lazy_import(
-        "hand_teleop.hand_pose.estimators.mediapipe",
+        "core.hand_pose.estimators.mediapipe",
         "MediaPipeEstimator",
         "pip install mediapipe"
     ),
     "apriltag": _lazy_import(
-        "hand_teleop.hand_pose.estimators.apriltag",
+        "core.hand_pose.estimators.apriltag",
         "AprilTagCubeEstimator",
         "pip install pupil-apriltags"
     ),

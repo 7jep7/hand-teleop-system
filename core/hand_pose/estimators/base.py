@@ -3,7 +3,7 @@ from typing import Optional
 
 import numpy as np
 
-from hand_teleop.hand_pose.types import HandKeypointsPred
+from core.hand_pose.types import HandKeypointsPred
 
 
 class HandPoseEstimator(ABC):

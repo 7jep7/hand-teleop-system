@@ -74,6 +74,9 @@ import os
 import json
 import numpy as np
 
+# Add project root to Python path
+sys.path.insert(0, '/home/jonas-petersen/dev/hand-teleop')
+
 def process_frame():
     try:
         # Load image
@@ -183,7 +186,8 @@ if __name__ == "__main__":
         
         # Run WiLoR processing in hand-teleop environment
         cmd = ["/mnt/nvme0n1p8/conda-envs/hand-teleop/bin/python", script_path]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, 
+                              cwd="/home/jonas-petersen/dev/hand-teleop")
         
         # Check results
         if "NO_HAND_DETECTED" in result.stdout:
@@ -194,7 +198,11 @@ if __name__ == "__main__":
             }
         elif "PROCESSING_COMPLETE" not in result.stdout:
             error_msg = result.stderr if result.stderr else "Processing failed"
-            raise HTTPException(status_code=500, detail=f"WiLoR processing error: {error_msg}")
+            stdout_msg = result.stdout if result.stdout else "No output"
+            print(f"DEBUG - Return code: {result.returncode}")
+            print(f"DEBUG - STDOUT: {stdout_msg}")
+            print(f"DEBUG - STDERR: {error_msg}")
+            raise HTTPException(status_code=500, detail=f"WiLoR processing error: {error_msg} | STDOUT: {stdout_msg[:200]}")
         
         # Load results
         if not os.path.exists(temp_output):
