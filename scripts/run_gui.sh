@@ -17,5 +17,6 @@ export CONDA_DEFAULT_ENV="hand-teleop"
 echo "✅ Environment activated"
 echo "📹 Starting GUI app (this may take a moment)..."
 
-# Run the GUI app
-/mnt/nvme0n1p8/conda-envs/hand-teleop/bin/python wilor_gui_app.py
+# Navigate to project root and run the GUI app
+cd "$(dirname "$0")/.."
+/mnt/nvme0n1p8/conda-envs/hand-teleop/bin/python examples/wilor_gui_app.py

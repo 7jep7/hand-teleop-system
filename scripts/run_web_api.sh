@@ -31,5 +31,6 @@ echo "  - CORS enabled for cross-origin requests"
 echo "  - Ready for jonaspetersen.com integration"
 echo ""
 
-# Run the web API using j11n environment
-/mnt/nvme0n1p8/conda-envs/j11n/bin/python web_api.py
+# Navigate to project root and run the web API using j11n environment
+cd "$(dirname "$0")/.."
+/mnt/nvme0n1p8/conda-envs/j11n/bin/python backend/web_api.py

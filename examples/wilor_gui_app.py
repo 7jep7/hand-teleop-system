@@ -136,7 +136,7 @@ def process_frame():
         frame = cv2.imread("gui_capture.jpg")
         
         # Load WiLoR
-        from hand_teleop.hand_pose.factory import create_estimator
+        from core.hand_pose.factory import create_estimator
         estimator = create_estimator("wilor")
         
         # Process

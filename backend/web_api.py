@@ -33,7 +33,7 @@ app.add_middleware(
 @app.get("/")
 async def get_index():
     """Serve the main web interface"""
-    return FileResponse("web_interface.html")
+    return FileResponse("frontend/web/web_interface.html")
 
 @app.get("/health")
 async def health_check():
@@ -83,7 +83,7 @@ def process_frame():
             return
         
         # Load WiLoR
-        from hand_teleop.hand_pose.factory import create_estimator
+        from core.hand_pose.factory import create_estimator
         estimator = create_estimator("wilor")
         
         # Process
