@@ -73,24 +73,46 @@ import sys
 import os
 import json
 import numpy as np
+import time
 
 # Add project root to Python path
 sys.path.insert(0, '/home/jonas-petersen/dev/hand-teleop')
 
+# Configure resource management before importing heavy modules
+from core.resource_manager import configure_torch_for_safety, SystemResourceMonitor
+configure_torch_for_safety()
+
+def progress_callback(message, percent):
+    '''Progress callback for monitoring'''
+    if percent >= 0:
+        print(f"PROGRESS: {percent}% - {message}")
+    else:
+        print(f"ERROR: {message}")
+
 def process_frame():
+    monitor = SystemResourceMonitor()
+    monitor.start_monitoring()
+    
     try:
+        print("STARTING: WiLoR processing with professional resource management")
+        
         # Load image
+        progress_callback("Loading input image", 5)
         frame = cv2.imread("temp_web_input.jpg")
         if frame is None:
             print("ERROR: Could not load image")
             return
         
-        # Load WiLoR
+        # Load WiLoR with resource management
+        progress_callback("Initializing WiLoR estimator", 15)
         from core.hand_pose.factory import create_estimator
         estimator = create_estimator("wilor")
         
-        # Process
+        # Process with progress tracking
+        progress_callback("Processing hand detection", 30)
         result = estimator.pipe.predict(frame, hand="right")
+        
+        progress_callback("Analyzing results", 70)
         
         if not result or len(result) == 0:
             print("NO_HAND_DETECTED")
@@ -99,11 +121,12 @@ def process_frame():
         hand = result[0]
         print("HAND_DETECTED")
         
-        # Create overlay
+        # Create overlay with progress
+        progress_callback("Creating visualization overlay", 80)
         overlay = frame.copy()
         hand_data = {"bbox": None, "keypoints_2d": []}
         
-        # Draw bounding box
+        # Draw bounding box safely
         if 'hand_bbox' in hand and hand['hand_bbox'] is not None:
             try:
                 bbox = hand['hand_bbox']
@@ -119,7 +142,7 @@ def process_frame():
             except Exception as bbox_error:
                 print("BBOX_ERROR: " + str(bbox_error))
         
-        # Draw keypoints
+        # Draw keypoints safely
         keypoints_2d = []
         if 'wilor_preds' in hand and hand['wilor_preds'] is not None:
             try:

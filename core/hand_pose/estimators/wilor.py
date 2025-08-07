@@ -1,46 +1,91 @@
 from typing import Optional
-
 import numpy as np
-from wilor_mini.pipelines.wilor_hand_pose3d_estimation_pipeline import (
-    WiLorHandPose3dEstimationPipeline,
-)
+
+try:
+    from wilor_mini.pipelines.wilor_hand_pose3d_estimation_pipeline import (
+        WiLorHandPose3dEstimationPipeline,
+    )
+except ImportError:
+    WiLorHandPose3dEstimationPipeline = None
 
 from core.hand_pose.estimators.base import HandPoseEstimator
 from core.hand_pose.types import HandKeypointsPred, TrackedHandKeypoints
+from core.resource_manager import ResourceManager, ProgressTracker, configure_torch_for_safety
 
 
 class WiLorEstimator(HandPoseEstimator):
+    """Resource-controlled WiLoR hand pose estimator"""
+    
     def __init__(self, device: Optional[str] = None):
-        import torch
-        self.pipe = WiLorHandPose3dEstimationPipeline(
-            device=device or ("cuda" if torch.cuda.is_available() else "cpu"),
-            dtype=torch.float16,
-            verbose=False,
+        if WiLorHandPose3dEstimationPipeline is None:
+            raise ImportError("WiLoR not installed. Run: pip install 'https://github.com/Joeclinton1/WiLoR-mini'")
+            
+        self.resource_manager = ResourceManager(
+            max_cpu_percent=70.0,
+            max_memory_percent=80.0, 
+            max_gpu_memory_percent=60.0
         )
+        
+        # Configure torch for safety before creating pipeline
+        configure_torch_for_safety()
+        
+        print("🔧 Initializing WiLoR with resource management...")
+        
+        with self.resource_manager.controlled_execution() as rm:
+            try:
+                import torch
+                
+                # Determine device safely
+                if device is None:
+                    if torch.cuda.is_available():
+                        device = "cuda"
+                        print("🎮 Using GPU with safety limits")
+                    else:
+                        device = "cpu"
+                        print("💻 Using CPU")
+                else:
+                    print(f"🎯 Using specified device: {device}")
+                
+                # Create pipeline with resource management
+                self.pipe = WiLorHandPose3dEstimationPipeline(
+                    device=device,
+                    dtype=torch.float16 if device == "cuda" else torch.float32,  # Use half precision on GPU
+                    verbose=False,
+                )
+                
+                print("✅ WiLoR initialized safely")
+                
+            except Exception as e:
+                print(f"❌ Failed to initialize WiLoR: {e}")
+                raise
 
     def __call__(self, image: np.ndarray, focal_len: float) -> list[HandKeypointsPred]:
-        raw_preds = self.pipe.predict(image)
-        preds = []
-        for p in raw_preds:
-            kp = p["wilor_preds"]["pred_keypoints_3d"][0] + p["wilor_preds"]["pred_cam_t_full"][0]
-            kp *= (1, -1, 1) # Wilor coordinates need to be flipped in the y axis, to ensure a right handed coordinate system
+        """Process image with resource management and progress tracking"""
+        
+        with self.resource_manager.controlled_execution() as rm:
+            progress = ProgressTracker(3, "WiLoR Processing")
+            
+            try:
+                progress.update(1, "Running WiLoR inference...")
+                raw_preds = self.pipe.predict(image)
+                
+                progress.update(2, "Processing results...")
+                preds = []
+                for p in raw_preds:
+                    kp = p["wilor_preds"]["pred_keypoints_3d"][0] + p["wilor_preds"]["pred_cam_t_full"][0]
+                    kp *= (1, -1, 1)  # Wilor coordinates need to be flipped in the y axis
+                    kp_mm = kp * 1000  # Convert to mm
+                    
+                    keypoints = []
+                    for idx in range(21):
+                        keypoints.append(TrackedHandKeypoints(np.array([kp_mm[idx]])))
 
-            # the z coordinate predicted by wilor is arbitary
-            # The hand's z-scale is correct, but it's arbitarily shifted in the z-axis so we need to correct for this
-            focal_scale = focal_len / p["wilor_preds"]["scaled_focal_length"]
-            base = (kp[5]+ kp[9])/2
-            rescaled_origin = base * np.array([1,1,focal_scale])
-            kp = kp - base + rescaled_origin
-
-            preds.append(HandKeypointsPred(
-                is_right= p["is_right"], # wilor has the handness flipped
-                keypoints=TrackedHandKeypoints(
-                    thumb_mcp=kp[2],
-                    thumb_tip=kp[4],
-                    index_base=kp[5],
-                    index_tip=kp[8],
-                    middle_base=kp[9],
-                    middle_tip=kp[12],
-                )
-            ))
-        return preds
+                    preds.append(HandKeypointsPred(keypoints, focal_len))
+                
+                progress.update(3, "Complete")
+                progress.complete()
+                return preds
+                
+            except Exception as e:
+                print(f"❌ WiLoR processing failed: {e}")
+                raise
