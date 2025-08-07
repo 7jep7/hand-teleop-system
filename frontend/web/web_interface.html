@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiLoR Hand Tracking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .camera-container {
+            position: relative;
+            background: #1f2937;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        .processing {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .capture-btn {
+            transition: all 0.3s ease;
+        }
+        .capture-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+        .capture-btn:disabled {
+            transform: none;
+            box-shadow: none;
+        }
+        .result-fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .loading-spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900 mb-2">WiLoR Hand Tracking</h1>
+            <p class="text-gray-600 text-lg">Real-time hand pose estimation with camera</p>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="grid lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
+            <!-- Left Side - Camera Feed -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
+                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                    </svg>
+                    Live Camera Feed
+                </h2>
+                
+                <!-- Camera Display -->
+                <div class="camera-container mb-4">
+                    <video id="videoElement" autoplay playsinline class="w-full h-64 object-cover rounded"></video>
+                    <canvas id="captureCanvas" class="hidden"></canvas>
+                </div>
+                
+                <!-- Controls -->
+                <div class="space-y-4">
+                    <button id="startCamera" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn">
+                        📹 Start Camera
+                    </button>
+                    
+                    <button id="captureBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                        📸 Capture & Process Hand
+                    </button>
+                    
+                    <!-- Status -->
+                    <div id="status" class="text-center p-3 rounded-lg bg-blue-50 text-blue-700">
+                        Click "Start Camera" to begin
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Side - Results -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
+                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    WiLoR Results
+                </h2>
+                
+                <!-- Results Display -->
+                <div id="resultsContainer" class="space-y-4">
+                    <!-- Default State -->
+                    <div id="defaultState" class="text-center py-8">
+                        <div class="w-16 h-16 mx-auto mb-4 bg-gray-200 rounded-full flex items-center justify-center">
+                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 4h10m-10 0V7a2 2 0 012-2h6a2 2 0 012 2v1m-10 0v10a2 2 0 002 2h6a2 2 0 002-2V8"></path>
+                            </svg>
+                        </div>
+                        <p class="text-gray-600">Capture an image to see WiLoR hand tracking results</p>
+                    </div>
+                    
+                    <!-- Processing State -->
+                    <div id="processingState" class="hidden text-center py-8">
+                        <div class="loading-spinner mx-auto mb-4"></div>
+                        <p class="text-blue-600 font-medium">Processing with WiLoR...</p>
+                        <p class="text-gray-500 text-sm mt-2">This may take 20-30 seconds on first run</p>
+                    </div>
+                    
+                    <!-- Results State -->
+                    <div id="resultsState" class="hidden">
+                        <div id="overlayContainer" class="mb-4">
+                            <img id="overlayImage" class="w-full rounded-lg shadow-md" alt="Hand tracking overlay">
+                        </div>
+                        
+                        <div id="handData" class="bg-gray-50 rounded-lg p-4">
+                            <h3 class="font-semibold text-gray-800 mb-2">Detection Results:</h3>
+                            <div id="handStats" class="text-sm text-gray-600 space-y-1">
+                                <!-- Hand statistics will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Error State -->
+                    <div id="errorState" class="hidden text-center py-8">
+                        <div class="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                            <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <p id="errorMessage" class="text-red-600 font-medium"></p>
+                    </div>
+                </div>
+                
+                <!-- Instructions -->
+                <div class="mt-6 bg-blue-50 rounded-lg p-4">
+                    <h4 class="font-semibold text-blue-800 mb-2">Instructions:</h4>
+                    <ul class="text-blue-700 text-sm space-y-1">
+                        <li>• Position your <strong>RIGHT hand</strong> in the camera view</li>
+                        <li>• Click "Capture & Process Hand" button</li>
+                        <li>• Wait for WiLoR processing to complete</li>
+                        <li>• View hand tracking overlay with keypoints</li>
+                    </ul>
+                    
+                    <h4 class="font-semibold text-blue-800 mt-4 mb-2">Overlay Legend:</h4>
+                    <ul class="text-blue-700 text-sm space-y-1">
+                        <li>• <span class="inline-block w-3 h-3 bg-green-500 rounded mr-2"></span>Green box = Hand bounding box</li>
+                        <li>• <span class="inline-block w-3 h-3 bg-yellow-400 rounded mr-2"></span>Yellow dots = Fingertips</li>
+                        <li>• <span class="inline-block w-3 h-3 bg-blue-500 rounded mr-2"></span>Blue dots = Joint positions</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let videoElement = null;
+        let captureCanvas = null;
+        let stream = null;
+        let isProcessing = false;
+
+        // DOM elements
+        const startCameraBtn = document.getElementById('startCamera');
+        const captureBtn = document.getElementById('captureBtn');
+        const statusDiv = document.getElementById('status');
+        const videoEl = document.getElementById('videoElement');
+        const captureCanvasEl = document.getElementById('captureCanvas');
+
+        // Results elements
+        const defaultState = document.getElementById('defaultState');
+        const processingState = document.getElementById('processingState');
+        const resultsState = document.getElementById('resultsState');
+        const errorState = document.getElementById('errorState');
+        const overlayImage = document.getElementById('overlayImage');
+        const handStats = document.getElementById('handStats');
+        const errorMessage = document.getElementById('errorMessage');
+
+        // Initialize
+        videoElement = videoEl;
+        captureCanvas = captureCanvasEl;
+
+        // Event listeners
+        startCameraBtn.addEventListener('click', startCamera);
+        captureBtn.addEventListener('click', captureAndProcess);
+
+        async function startCamera() {
+            try {
+                updateStatus('Starting camera...', 'blue');
+                
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 }, 
+                        height: { ideal: 480 },
+                        facingMode: 'user'
+                    } 
+                });
+                
+                videoElement.srcObject = stream;
+                
+                videoElement.onloadedmetadata = () => {
+                    captureBtn.disabled = false;
+                    startCameraBtn.textContent = '✅ Camera Active';
+                    startCameraBtn.disabled = true;
+                    updateStatus('Position your RIGHT hand in view', 'green');
+                };
+                
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                updateStatus('❌ Could not access camera', 'red');
+            }
+        }
+
+        async function captureAndProcess() {
+            if (isProcessing) return;
+            
+            isProcessing = true;
+            captureBtn.disabled = true;
+            captureBtn.textContent = '🔄 Processing...';
+            
+            showState('processing');
+            updateStatus('Processing with WiLoR...', 'orange');
+            
+            try {
+                // Capture frame from video
+                const canvas = captureCanvas;
+                const context = canvas.getContext('2d');
+                
+                canvas.width = videoElement.videoWidth;
+                canvas.height = videoElement.videoHeight;
+                context.drawImage(videoElement, 0, 0);
+                
+                // Convert to blob
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+                
+                // Create form data
+                const formData = new FormData();
+                formData.append('file', blob, 'capture.jpg');
+                
+                // Send to API
+                const response = await fetch('/api/process-hand', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.detail || 'Processing failed');
+                }
+                
+                if (result.success && result.hand_detected) {
+                    // Show results
+                    overlayImage.src = result.overlay_image;
+                    
+                    // Update hand statistics
+                    handStats.innerHTML = `
+                        <div>✅ Hand detected successfully</div>
+                        <div>📍 Keypoints found: ${result.keypoint_count}</div>
+                        <div>📦 Bounding box: ${result.hand_data.bbox ? 'Yes' : 'No'}</div>
+                        <div>🎯 Processing: Complete</div>
+                    `;
+                    
+                    showState('results');
+                    updateStatus('✅ Hand tracking complete!', 'green');
+                } else {
+                    // No hand detected
+                    showError('No hand detected in image. Please position your RIGHT hand clearly in view.');
+                    updateStatus('❌ No hand detected', 'red');
+                }
+                
+            } catch (error) {
+                console.error('Processing error:', error);
+                showError(`Processing failed: ${error.message}`);
+                updateStatus('❌ Processing failed', 'red');
+            } finally {
+                // Reset button
+                isProcessing = false;
+                captureBtn.disabled = false;
+                captureBtn.textContent = '📸 Capture & Process Hand';
+            }
+        }
+
+        function showState(state) {
+            // Hide all states
+            defaultState.classList.add('hidden');
+            processingState.classList.add('hidden');
+            resultsState.classList.add('hidden');
+            errorState.classList.add('hidden');
+            
+            // Show requested state
+            switch(state) {
+                case 'processing':
+                    processingState.classList.remove('hidden');
+                    break;
+                case 'results':
+                    resultsState.classList.remove('hidden');
+                    resultsState.classList.add('result-fade-in');
+                    break;
+                case 'error':
+                    errorState.classList.remove('hidden');
+                    break;
+                default:
+                    defaultState.classList.remove('hidden');
+            }
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            showState('error');
+        }
+
+        function updateStatus(message, color) {
+            statusDiv.textContent = message;
+            statusDiv.className = `text-center p-3 rounded-lg`;
+            
+            switch(color) {
+                case 'green':
+                    statusDiv.classList.add('bg-green-50', 'text-green-700');
+                    break;
+                case 'red':
+                    statusDiv.classList.add('bg-red-50', 'text-red-700');
+                    break;
+                case 'orange':
+                    statusDiv.classList.add('bg-orange-50', 'text-orange-700');
+                    break;
+                default:
+                    statusDiv.classList.add('bg-blue-50', 'text-blue-700');
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+    </script>
+</body>
+</html>

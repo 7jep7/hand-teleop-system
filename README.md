@@ -1,161 +1,100 @@
-# hand-teleop
+# Hand Teleop - Hand-Controlled Robot Manipulation
 
-**hand-teleop** turns your webcam into real-time robot joint positions — no servers, just pure Python.
+A modern, web-based system for controlling robot manipulators through hand gestures using computer vision and machine learning.
 
-Designed for [LeRobot](https://github.com/huggingface/lerobot), it runs fast, smooth, and locally.
+## 🎯 Project Goal
 
-## Highlights
+Build a complete hand-controlled robot manipulation system where you can steer your SO-101 (or other robot manipulator) by simply moving your hand in front of a camera.
 
-* ⚡ **Wilor model** (GPU) — accurate and real-time (currently the only fully working backend)
-* 🧩 **AprilTag-based fingertip tracking** (experimental)
-* 🖐️ Direct joint outputs — no inverse kinematics required
-* 🔄 Built-in Kalman smoothing for low-jitter motion
-* 🧵 Low-latency threading: tracking runs in the background
-* 🧩 Plug-and-play with LeRobot
+## 🏆 Current Status: WiLoR Hand Tracking Demo
 
----
+The first milestone is complete: **Real-time hand pose estimation using WiLoR** with web interface integration.
 
-## Installation
+## 🚀 Features
 
-### First Install the LeRobot fork!
+- **Real-time Hand Tracking**: 21-point hand pose estimation using WiLoR
+- **Web Interface**: Live camera capture and overlay visualization  
+- **REST API**: FastAPI backend for seamless integration
+- **Remix Ready**: React component ready for jonaspetersen.com
+- **Robot Support**: Kinematics and control for SO-101 and other manipulators
 
-This project is compatible with LeRobot but requires some changes to the teleoperation code to work. I have created a fork which uses it that should work with this library
+## 📁 Project Structure
 
-https://github.com/Joeclinton1/lerobot/tree/hand_teleop
+```
+hand-teleop/
+├── 📖 docs/                    # Documentation
+├── 🌐 frontend/               # Web interface components
+│   ├── components/           # Remix/React components  
+│   └── web/                 # Standalone web interface
+├── ⚙️  backend/               # API and server code
+├── 🔧 core/                  # Core modules
+│   ├── hand_pose/          # Hand pose estimation
+│   ├── robot_control/      # Robot manipulation & kinematics
+│   └── tracking/           # Tracking algorithms
+├── 🔨 scripts/              # Utility and setup scripts
+├── 🧪 tests/                # Test files
+├── 📋 examples/             # Example applications
+└── 📦 assets/               # Static assets and sample data
+```
 
-My fork is outdated now, and I am working to get it working with the newest verison of LeRobot but they changed the joint configuration in a way that is currently breaking this project. [Link to work in progress fork](https://github.com/Joeclinton1/lerobot/tree/hand_teleop_new)
+## 🚀 Quick Start
 
-### ✅ Recommended (Wilor – GPU-based, CUDA required)
-
+### 1. Setup Environment
 ```bash
-pip install "hand-teleop @ git+https://github.com/joeclinton1/hand-teleop.git#egg=hand-teleop[wilor]"
+# Run the setup script
+./scripts/setup.sh
 ```
 
-> ✅ **Works well out of the box**
-> ⚠️ **Requires GPU with CUDA**
-
----
-
-### ⚠️ Experimental CPU-based Backends
-
+### 2. Start Web API
 ```bash
-pip install "hand-teleop @ git+https://github.com/joeclinton1/hand-teleop.git#egg=hand-teleop[mediapipe]"
-pip install "hand-teleop @ git+https://github.com/joeclinton1/hand-teleop.git#egg=hand-teleop[apriltag]"
+# Start the FastAPI backend
+./scripts/run_web_api.sh
 ```
 
-> 🧪 These are **almost working**, but not quite stable yet.
-> 🙏 **PRs welcome** to help fix or improve them!
-
----
-
-### 🛠 Development Install
-
+### 3. Access Web Interface
 ```bash
-conda create -n hand-teleop python=3.10 -y
-conda activate hand-teleop
-conda install -c conda-forge ffmpeg
-
-git clone https://github.com/joeclinton1/hand-teleop.git
-cd hand-teleop
-pip install -e ".[wilor]"
+# Open browser to
+http://localhost:8000
 ```
 
-> ⚠️ **Important:** If you're using `hand-teleop` alongside [LeRobot](https://github.com/huggingface/lerobot), it uses `opencv-python-headless`, which **breaks GUI functions** like `cv2.imshow()`.
->
-> To fix this:
->
-> ```bash
-> pip uninstall opencv-python-headless opencv-python opencv-contrib-python
-> pip install opencv-python
-> ```
----
-
-### Optional (for forward/inverse kinematics)
-
+### 4. Try Desktop GUI (Optional)
 ```bash
-conda install -c conda-forge pinocchio
+# Run the desktop GUI example
+./scripts/run_gui.sh
 ```
 
----
+## 📚 Documentation
 
-## AprilTag Setup (for cube-based tracking)
+- [📋 Web Integration Guide](docs/WEB_INTEGRATION.md) - Complete guide for web integration
+- [🤖 SO-101 Setup](docs/SO101_SETUP.md) - Robot-specific setup instructions
+- [📖 Main Documentation](docs/README.md) - Detailed project documentation
 
-If you're experimenting with the `apriltag` model, here's the intended tag layout:
+## 🛠️ Development
 
-### Cube Tag Layout
+### Core Modules
+- **`core/hand_pose/`**: Hand tracking implementations (WiLoR, MediaPipe, AprilTag)
+- **`core/robot_control/`**: Robot kinematics, control, and URDF support
+- **`core/tracking/`**: Kalman filters and tracking utilities
 
-Each cube is 2.5 cm with 1.8 cm-wide tags.
+### Frontend Components
+- **`frontend/components/`**: Remix/React components for web integration
+- **`frontend/web/`**: Standalone web interface
 
-| Face   | Index Tags | Thumb Tags |
-| ------ | ---------- | ---------- |
-| Front  | 0          | 5          |
-| Left   | 1          | 6          |
-| Right  | 2          | 7          |
-| Top    | 3          | 8          |
-| Bottom | 4          | 9          |
+### Backend API
+- **`backend/web_api.py`**: FastAPI server with hand processing endpoints
 
-```
-      +------+       
-      |  3   |     ↑ Top
- +----+------+----+
- |  1 |  0   |  2 |   → Front = 0
- +----+------+----+
-      |  4   |     ↓ Bottom
-      +------+
-```
+## 🎯 Roadmap
 
-* Only **one visible tag per cube** is needed.
-* Automatically selects the best visible tag.
+- [x] **Milestone 1**: WiLoR Hand Tracking Demo ✅
+- [ ] **Milestone 2**: Hand-to-Robot Pose Mapping
+- [ ] **Milestone 3**: Real-time Robot Control
+- [ ] **Milestone 4**: Advanced Gestures & Commands
+- [ ] **Milestone 5**: Multi-robot Support
 
----
+## 📄 License
 
-### Assets
+This project is licensed under the terms specified in the LICENSE file.
 
-* STL: `assets/finger_tip_cubes.stl`
-* Printable tags: `assets/tag25h9_0-9,0-9/`
+## 🤝 Contributing
 
----
-
-## Basic Usage
-
-```python
-from hand_teleop import HandTracker
-
-tracker = HandTracker(model="wilor", hand="right", cam_idx=0)
-tracker.start()
-
-while True:
-    joints = tracker.get_joint_positions()
-    robot.set_joint_positions(joints)
-```
-
----
-
-## Demo
-
-```bash
-python main.py
-````
-
-### Command-line options
-
-* `--model wilor` — Hand model to use
-* `--fps 30` — Frame rate (default: 60)
-* `--quiet` — Silence console output
-* `--no-joint` — Output raw gripper pose (pose-space mode)
-* `--cam-idx 1` — Change camera index used for the tracking
-* `--hand left` — Choose which hand to track (`left` or `right`, default: `right`)
-* `--use-scroll` — Enable scroll-based gripper control
-
----
-
-## Controls
-
-* `p` — Pause/resume
-* `space` — Hold to realign
-
----
-
-## License
-
-Apache 2.0
+This project is designed with a clean, modular structure to support future growth and collaboration.

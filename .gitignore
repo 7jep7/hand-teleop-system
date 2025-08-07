@@ -18,6 +18,24 @@ eggs/
 lib/
 lib64/
 parts/
+
+# Temporary files and debugging artifacts
+debug_*.py
+temp_*.jpg
+temp_*.json
+temp_*.py
+*.tmp
+*_output.txt
+
+# Test images and captured frames
+captured_*.jpg
+test_frame*.jpg
+photo_*.jpg
+*_overlay.jpg
+gui_overlay.jpg
+
+# Development artifacts
+wilor_output*.txt
 sdist/
 var/
 *.egg-info/

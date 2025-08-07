@@ -1,0 +1,19 @@
+name: hand-teleop
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - ffmpeg
+  - pip
+  - numpy>=1.23.0
+  - opencv
+  - matplotlib
+  - scipy
+  - pynput
+  - pydantic<2.0
+  - pinocchio  # for kinematics
+  - pip:
+    - git+https://github.com/Joeclinton1/WiLoR-mini  # wilor model
+    - pupil-apriltags  # for apriltag tracking (optional)
+    - mediapipe  # for mediapipe tracking (optional)
