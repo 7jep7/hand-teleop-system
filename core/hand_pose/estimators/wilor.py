@@ -21,12 +21,11 @@ class WiLorEstimator(HandPoseEstimator):
             raise ImportError("WiLoR not installed. Run: pip install 'https://github.com/Joeclinton1/WiLoR-mini'")
             
         self.resource_manager = ResourceManager(
-            max_cpu_percent=70.0,
-            max_memory_percent=80.0, 
-            max_gpu_memory_percent=60.0
-        )
-        
-        # Configure torch for safety before creating pipeline
+            max_cpu_percent=85.0,      # Increased from 70%
+            max_memory_percent=90.0,   # Increased from 80%
+            max_gpu_memory_percent=75.0, # Increased from 60%
+            model_loading_mode=True    # Special mode for model loading
+        )        # Configure torch for safety before creating pipeline
         configure_torch_for_safety()
         
         print("🔧 Initializing WiLoR with resource management...")

@@ -36,9 +36,36 @@ def main():
         if args.monitor:
             print("🔍 Resource monitoring enabled")
             
-        # Note: For production use, run via scripts/run_web_api.sh
-        # This ensures proper conda environment activation and resource management
-        print("💡 For best results, use: ./scripts/run_web_api.sh")
+        # Check if we have the right environment setup
+        j11n_python = "/mnt/nvme0n1p8/conda-envs/j11n/bin/python"
+        if not os.path.exists(j11n_python):
+            print("❌ j11n environment not found!")
+            print("💡 Use: ./scripts/run_web_api.sh for proper setup")
+            sys.exit(1)
+            
+        # Start with the correct environment (j11n for web, hand-teleop for ML)
+        print("🔧 Using j11n environment for web API...")
+        print("🤖 hand-teleop environment will be used for ML processing")
+        print("💡 For full resource management, use: ./scripts/run_web_api.sh")
+        
+        try:
+            import subprocess
+            cmd = [
+                j11n_python, "-c",
+                f"""
+import uvicorn
+import sys
+import os
+sys.path.insert(0, os.path.join('{os.getcwd()}', 'backend'))
+from web_api import app
+uvicorn.run(app, host='{args.host}', port={args.port})
+                """
+            ]
+            subprocess.run(cmd)
+        except Exception as e:
+            print(f"❌ Error starting web API: {e}")
+            print("💡 For best results, use: ./scripts/run_web_api.sh")
+            sys.exit(1)
         
     elif args.command == 'gui':
         print("🖥️  Starting Hand Teleop GUI...")

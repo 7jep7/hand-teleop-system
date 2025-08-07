@@ -15,12 +15,14 @@ class ResourceManager:
     """Professional resource management for GPU-intensive operations"""
     
     def __init__(self, 
-                 max_cpu_percent: float = 70.0,
-                 max_memory_percent: float = 80.0,
-                 max_gpu_memory_percent: float = 60.0):
+                 max_cpu_percent: float = 85.0,     # Increased from 70%
+                 max_memory_percent: float = 90.0,   # Increased from 80% 
+                 max_gpu_memory_percent: float = 75.0, # Increased from 60%
+                 model_loading_mode: bool = False):  # Special mode for model loading
         self.max_cpu_percent = max_cpu_percent
         self.max_memory_percent = max_memory_percent
         self.max_gpu_memory_percent = max_gpu_memory_percent
+        self.model_loading_mode = model_loading_mode
         self._monitoring = False
         self._kill_switch = False
         self._emergency_triggered = False
@@ -90,9 +92,13 @@ class ResourceManager:
                 # Check memory usage
                 memory = psutil.virtual_memory()
                 
-                # Warning thresholds
-                cpu_warning = cpu_percent > self.max_cpu_percent
-                memory_warning = memory.percent > self.max_memory_percent
+                # Warning thresholds - more lenient during model loading
+                if self.model_loading_mode:
+                    cpu_warning = cpu_percent > 95  # Very high threshold during loading
+                    memory_warning = memory.percent > 95  # Very high threshold during loading
+                else:
+                    cpu_warning = cpu_percent > self.max_cpu_percent
+                    memory_warning = memory.percent > self.max_memory_percent
                 
                 if cpu_warning or memory_warning:
                     consecutive_warnings += 1
