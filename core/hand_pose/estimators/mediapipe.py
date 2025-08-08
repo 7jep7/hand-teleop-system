@@ -5,8 +5,8 @@ import mediapipe as mp
 import numpy as np
 from mediapipe.tasks.python import vision
 
-from hand_teleop.hand_pose.estimators.base import HandPoseEstimator
-from hand_teleop.hand_pose.types import HandKeypointsPred, TrackedHandKeypoints
+from core.hand_pose.estimators.base import HandPoseEstimator
+from core.hand_pose.types import HandKeypointsPred, TrackedHandKeypoints
 
 
 class MediaPipeEstimator(HandPoseEstimator):
@@ -73,6 +73,17 @@ class MediaPipeEstimator(HandPoseEstimator):
 
             kp_cam = kp3d - base3d + t
 
+            # MVP: Extract specific fingertips for debugging
+            thumb_tip = kp_cam[4]
+            index_pip = kp_cam[6]  # MVP: Added index PIP joint
+            index_tip = kp_cam[8]
+            
+            # MVP: Console logging for debugging
+            hand_type = "RIGHT" if hand[0].category_name.lower() == "right" else "LEFT"
+            print(f"[MVP] {hand_type} Hand - Thumb: ({thumb_tip[0]:.3f}, {thumb_tip[1]:.3f}, {thumb_tip[2]:.3f})")
+            print(f"[MVP] {hand_type} Hand - Index PIP: ({index_pip[0]:.3f}, {index_pip[1]:.3f}, {index_pip[2]:.3f})")
+            print(f"[MVP] {hand_type} Hand - Index Tip: ({index_tip[0]:.3f}, {index_tip[1]:.3f}, {index_tip[2]:.3f})")
+
             preds.append(
                 HandKeypointsPred(
                     is_right = hand[0].category_name.lower() == "right",
@@ -80,6 +91,7 @@ class MediaPipeEstimator(HandPoseEstimator):
                         thumb_mcp   = kp_cam[2],
                         thumb_tip   = kp_cam[4],
                         index_base  = kp_cam[5],
+                        index_pip   = kp_cam[6],  # MVP: Added index PIP
                         index_tip   = kp_cam[8],
                         middle_base = kp_cam[9],
                         middle_tip  = kp_cam[12],
