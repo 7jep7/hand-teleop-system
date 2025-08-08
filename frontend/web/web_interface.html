@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WiLoR Hand Tracking</title>
+    <title>Hand Teleop - Real-time Tracking</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
     <style>
         .camera-container {
             position: relative;
@@ -51,8 +54,8 @@
     <div class="container mx-auto px-4 py-8">
         <!-- Header -->
         <div class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-gray-900 mb-2">WiLoR Hand Tracking</h1>
-            <p class="text-gray-600 text-lg">Real-time hand pose estimation with camera</p>
+            <h1 class="text-4xl font-bold text-gray-900 mb-2">Hand Teleop System</h1>
+            <p class="text-gray-600 text-lg">Real-time fingertip tracking for robot control</p>
         </div>
         
         <!-- Main Content -->
@@ -69,18 +72,38 @@
                 <!-- Camera Display -->
                 <div class="camera-container mb-4">
                     <video id="videoElement" autoplay playsinline class="w-full h-64 object-cover rounded"></video>
+                    <canvas id="outputCanvas" class="absolute top-0 left-0 w-full h-64 rounded"></canvas>
                     <canvas id="captureCanvas" class="hidden"></canvas>
                 </div>
                 
                 <!-- Controls -->
                 <div class="space-y-4">
                     <button id="startCamera" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn">
-                        📹 Start Camera
+                        📹 Start Live Tracking
                     </button>
                     
                     <button id="captureBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
-                        📸 Capture & Process Hand
+                        📸 Capture & Process (WiLoR)
                     </button>
+                    
+                    <!-- Fingertip Display -->
+                    <div id="fingertipData" class="hidden bg-gray-50 rounded-lg p-4">
+                        <h4 class="font-semibold text-gray-800 mb-2">Live Fingertips:</h4>
+                        <div class="grid grid-cols-3 gap-2 text-xs">
+                            <div class="bg-yellow-100 p-2 rounded">
+                                <div class="font-medium text-yellow-800">Thumb Tip</div>
+                                <div id="thumbCoords" class="text-yellow-600">-</div>
+                            </div>
+                            <div class="bg-blue-100 p-2 rounded">
+                                <div class="font-medium text-blue-800">Index PIP</div>
+                                <div id="pipCoords" class="text-blue-600">-</div>
+                            </div>
+                            <div class="bg-red-100 p-2 rounded">
+                                <div class="font-medium text-red-800">Index Tip</div>
+                                <div id="tipCoords" class="text-red-600">-</div>
+                            </div>
+                        </div>
+                    </div>
                     
                     <!-- Status -->
                     <div id="status" class="text-center p-3 rounded-lg bg-blue-50 text-blue-700">
@@ -95,7 +118,7 @@
                     <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                     </svg>
-                    WiLoR Results
+                    Tracking Results
                 </h2>
                 
                 <!-- Results Display -->
@@ -107,7 +130,32 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 4h10m-10 0V7a2 2 0 012-2h6a2 2 0 012 2v1m-10 0v10a2 2 0 002 2h6a2 2 0 002-2V8"></path>
                             </svg>
                         </div>
-                        <p class="text-gray-600">Capture an image to see WiLoR hand tracking results</p>
+                        <p class="text-gray-600">Start live tracking to see real-time fingertip positions</p>
+                    </div>
+                    
+                    <!-- Live Tracking State -->
+                    <div id="liveState" class="hidden">
+                        <div class="bg-green-50 rounded-lg p-4 mb-4">
+                            <div class="flex items-center mb-2">
+                                <div class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                                <span class="text-green-800 font-medium">Live Tracking Active</span>
+                                <span id="fps" class="ml-auto text-green-600 text-sm">- FPS</span>
+                            </div>
+                            <div class="text-green-700 text-sm">
+                                Show your hand to see real-time fingertip detection
+                            </div>
+                        </div>
+                        
+                        <!-- Robot Control Preview -->
+                        <div id="robotPreview" class="hidden bg-blue-50 rounded-lg p-4 mb-4">
+                            <h4 class="font-semibold text-blue-800 mb-2">Robot Control Mapping:</h4>
+                            <div class="grid grid-cols-2 gap-2 text-sm">
+                                <div class="text-blue-700">X Position: <span id="robotX" class="font-mono">0.0</span></div>
+                                <div class="text-blue-700">Y Position: <span id="robotY" class="font-mono">0.0</span></div>
+                                <div class="text-blue-700">Z Position: <span id="robotZ" class="font-mono">0.0</span></div>
+                                <div class="text-blue-700">Gripper: <span id="robotGripper" class="font-mono">Open</span></div>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- Processing State -->
@@ -144,19 +192,19 @@
                 
                 <!-- Instructions -->
                 <div class="mt-6 bg-blue-50 rounded-lg p-4">
-                    <h4 class="font-semibold text-blue-800 mb-2">Instructions:</h4>
+                    <h4 class="font-semibold text-blue-800 mb-2">How to use:</h4>
                     <ul class="text-blue-700 text-sm space-y-1">
+                        <li>• <strong>Live Tracking:</strong> Real-time fingertip detection with MediaPipe</li>
+                        <li>• <strong>WiLoR Processing:</strong> High-quality capture analysis</li>
                         <li>• Position your <strong>RIGHT hand</strong> in the camera view</li>
-                        <li>• Click "Capture & Process Hand" button</li>
-                        <li>• Wait for WiLoR processing to complete</li>
-                        <li>• View hand tracking overlay with keypoints</li>
+                        <li>• Three key points: Thumb tip, Index PIP, Index tip</li>
                     </ul>
                     
                     <h4 class="font-semibold text-blue-800 mt-4 mb-2">Overlay Legend:</h4>
                     <ul class="text-blue-700 text-sm space-y-1">
-                        <li>• <span class="inline-block w-3 h-3 bg-green-500 rounded mr-2"></span>Green box = Hand bounding box</li>
-                        <li>• <span class="inline-block w-3 h-3 bg-yellow-400 rounded mr-2"></span>Yellow dots = Fingertips</li>
-                        <li>• <span class="inline-block w-3 h-3 bg-blue-500 rounded mr-2"></span>Blue dots = Joint positions</li>
+                        <li>• <span class="inline-block w-3 h-3 bg-yellow-400 rounded-full mr-2"></span>Yellow = Thumb tip</li>
+                        <li>• <span class="inline-block w-3 h-3 bg-blue-500 rounded-full mr-2"></span>Blue = Index PIP joint</li>
+                        <li>• <span class="inline-block w-3 h-3 bg-red-500 rounded-full mr-2"></span>Red = Index fingertip</li>
                     </ul>
                 </div>
             </div>
@@ -164,185 +212,363 @@
     </div>
 
     <script>
-        // Global variables
-        let videoElement = null;
-        let captureCanvas = null;
-        let stream = null;
-        let isProcessing = false;
-
-        // DOM elements
-        const startCameraBtn = document.getElementById('startCamera');
-        const captureBtn = document.getElementById('captureBtn');
-        const statusDiv = document.getElementById('status');
-        const videoEl = document.getElementById('videoElement');
-        const captureCanvasEl = document.getElementById('captureCanvas');
-
-        // Results elements
-        const defaultState = document.getElementById('defaultState');
-        const processingState = document.getElementById('processingState');
-        const resultsState = document.getElementById('resultsState');
-        const errorState = document.getElementById('errorState');
-        const overlayImage = document.getElementById('overlayImage');
-        const handStats = document.getElementById('handStats');
-        const errorMessage = document.getElementById('errorMessage');
-
-        // Initialize
-        videoElement = videoEl;
-        captureCanvas = captureCanvasEl;
-
-        // Event listeners
-        startCameraBtn.addEventListener('click', startCamera);
-        captureBtn.addEventListener('click', captureAndProcess);
-
-        async function startCamera() {
-            try {
-                updateStatus('Starting camera...', 'blue');
+        // Client-side hand tracking with MediaPipe
+        class HandTeleopTracker {
+            constructor() {
+                this.hands = null;
+                this.camera = null;
+                this.isTracking = false;
+                this.fingertips = { thumb: null, indexPip: null, indexTip: null };
+                this.fps = 0;
+                this.frameCount = 0;
+                this.lastTime = performance.now();
                 
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        width: { ideal: 640 }, 
-                        height: { ideal: 480 },
-                        facingMode: 'user'
-                    } 
-                });
+                // DOM elements
+                this.videoElement = document.getElementById('videoElement');
+                this.outputCanvas = document.getElementById('outputCanvas');
+                this.captureCanvas = document.getElementById('captureCanvas');
+                this.ctx = this.outputCanvas.getContext('2d');
                 
-                videoElement.srcObject = stream;
-                
-                videoElement.onloadedmetadata = () => {
-                    captureBtn.disabled = false;
-                    startCameraBtn.textContent = '✅ Camera Active';
-                    startCameraBtn.disabled = true;
-                    updateStatus('Position your RIGHT hand in view', 'green');
-                };
-                
-            } catch (error) {
-                console.error('Error accessing camera:', error);
-                updateStatus('❌ Could not access camera', 'red');
+                this.initializeElements();
             }
-        }
-
-        async function captureAndProcess() {
-            if (isProcessing) return;
             
-            isProcessing = true;
-            captureBtn.disabled = true;
-            captureBtn.textContent = '🔄 Processing...';
+            initializeElements() {
+                this.startBtn = document.getElementById('startCamera');
+                this.captureBtn = document.getElementById('captureBtn');
+                this.statusDiv = document.getElementById('status');
+                this.fingertipData = document.getElementById('fingertipData');
+                this.defaultState = document.getElementById('defaultState');
+                this.liveState = document.getElementById('liveState');
+                this.fpsDisplay = document.getElementById('fps');
+                
+                // Coordinate displays
+                this.thumbCoords = document.getElementById('thumbCoords');
+                this.pipCoords = document.getElementById('pipCoords');
+                this.tipCoords = document.getElementById('tipCoords');
+                
+                // Robot preview elements
+                this.robotPreview = document.getElementById('robotPreview');
+                this.robotX = document.getElementById('robotX');
+                this.robotY = document.getElementById('robotY');
+                this.robotZ = document.getElementById('robotZ');
+                this.robotGripper = document.getElementById('robotGripper');
+                
+                this.setupEventListeners();
+            }
             
-            showState('processing');
-            updateStatus('Processing with WiLoR...', 'orange');
+            setupEventListeners() {
+                this.startBtn.addEventListener('click', () => this.toggleTracking());
+                this.captureBtn.addEventListener('click', () => this.captureAndProcess());
+            }
             
-            try {
-                // Capture frame from video
-                const canvas = captureCanvas;
-                const context = canvas.getContext('2d');
+            async initializeMediaPipe() {
+                try {
+                    // Initialize MediaPipe Hands
+                    this.hands = new Hands({
+                        locateFile: (file) => {
+                            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                        }
+                    });
+                    
+                    this.hands.setOptions({
+                        maxNumHands: 1,
+                        modelComplexity: 1,
+                        minDetectionConfidence: 0.5,
+                        minTrackingConfidence: 0.5
+                    });
+                    
+                    this.hands.onResults((results) => this.onResults(results));
+                    
+                    // Initialize camera
+                    this.camera = new Camera(this.videoElement, {
+                        onFrame: async () => {
+                            if (this.isTracking) {
+                                await this.hands.send({ image: this.videoElement });
+                            }
+                        },
+                        width: 640,
+                        height: 480
+                    });
+                    
+                    return true;
+                } catch (error) {
+                    console.error('MediaPipe initialization failed:', error);
+                    return false;
+                }
+            }
+            
+            async toggleTracking() {
+                if (!this.isTracking) {
+                    await this.startTracking();
+                } else {
+                    this.stopTracking();
+                }
+            }
+            
+            async startTracking() {
+                this.updateStatus('Initializing MediaPipe...', 'blue');
                 
-                canvas.width = videoElement.videoWidth;
-                canvas.height = videoElement.videoHeight;
-                context.drawImage(videoElement, 0, 0);
-                
-                // Convert to blob
-                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
-                
-                // Create form data
-                const formData = new FormData();
-                formData.append('file', blob, 'capture.jpg');
-                
-                // Send to API
-                const response = await fetch('/api/process-hand', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(result.detail || 'Processing failed');
+                if (!this.hands && !(await this.initializeMediaPipe())) {
+                    this.updateStatus('❌ Failed to initialize MediaPipe', 'red');
+                    return;
                 }
                 
-                if (result.success && result.hand_detected) {
-                    // Show results
-                    overlayImage.src = result.overlay_image;
+                try {
+                    await this.camera.start();
+                    this.isTracking = true;
                     
-                    // Update hand statistics
-                    handStats.innerHTML = `
-                        <div>✅ Hand detected successfully</div>
-                        <div>📍 Keypoints found: ${result.keypoint_count}</div>
-                        <div>📦 Bounding box: ${result.hand_data.bbox ? 'Yes' : 'No'}</div>
-                        <div>🎯 Processing: Complete</div>
-                    `;
+                    // Update UI
+                    this.startBtn.textContent = '⏹️ Stop Tracking';
+                    this.startBtn.className = 'w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn';
+                    this.captureBtn.disabled = false;
                     
-                    showState('results');
-                    updateStatus('✅ Hand tracking complete!', 'green');
+                    this.fingertipData.classList.remove('hidden');
+                    this.defaultState.classList.add('hidden');
+                    this.liveState.classList.remove('hidden');
+                    this.robotPreview.classList.remove('hidden');
+                    
+                    this.updateStatus('✅ Live tracking active', 'green');
+                    
+                    // Start FPS counter
+                    this.startFPSCounter();
+                    
+                } catch (error) {
+                    console.error('Error starting camera:', error);
+                    this.updateStatus('❌ Could not access camera', 'red');
+                }
+            }
+            
+            stopTracking() {
+                this.isTracking = false;
+                
+                if (this.camera) {
+                    this.camera.stop();
+                }
+                
+                // Clear canvas
+                this.ctx.clearRect(0, 0, this.outputCanvas.width, this.outputCanvas.height);
+                
+                // Update UI
+                this.startBtn.textContent = '� Start Live Tracking';
+                this.startBtn.className = 'w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn';
+                this.captureBtn.disabled = true;
+                
+                this.fingertipData.classList.add('hidden');
+                this.liveState.classList.add('hidden');
+                this.defaultState.classList.remove('hidden');
+                this.robotPreview.classList.add('hidden');
+                
+                this.updateStatus('Tracking stopped', 'blue');
+            }
+            
+            onResults(results) {
+                if (!this.isTracking) return;
+                
+                // Update canvas size
+                this.outputCanvas.width = this.videoElement.videoWidth;
+                this.outputCanvas.height = this.videoElement.videoHeight;
+                
+                // Clear previous drawings
+                this.ctx.clearRect(0, 0, this.outputCanvas.width, this.outputCanvas.height);
+                
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const landmarks = results.multiHandLandmarks[0];
+                    
+                    // Extract our MVP fingertips (MediaPipe landmark indices)
+                    // 4 = thumb tip, 6 = index PIP, 8 = index tip
+                    const thumbTip = landmarks[4];
+                    const indexPip = landmarks[6];
+                    const indexTip = landmarks[8];
+                    
+                    // Convert to pixel coordinates
+                    const w = this.outputCanvas.width;
+                    const h = this.outputCanvas.height;
+                    
+                    this.fingertips = {
+                        thumb: { x: thumbTip.x * w, y: thumbTip.y * h, z: thumbTip.z },
+                        indexPip: { x: indexPip.x * w, y: indexPip.y * h, z: indexPip.z },
+                        indexTip: { x: indexTip.x * w, y: indexTip.y * h, z: indexTip.z }
+                    };
+                    
+                    // Draw fingertips
+                    this.drawFingertips();
+                    
+                    // Update displays
+                    this.updateCoordinateDisplays();
+                    this.updateRobotMapping();
+                    
                 } else {
                     // No hand detected
-                    showError('No hand detected in image. Please position your RIGHT hand clearly in view.');
-                    updateStatus('❌ No hand detected', 'red');
+                    this.fingertips = { thumb: null, indexPip: null, indexTip: null };
+                    this.updateCoordinateDisplays();
                 }
                 
-            } catch (error) {
-                console.error('Processing error:', error);
-                showError(`Processing failed: ${error.message}`);
-                updateStatus('❌ Processing failed', 'red');
-            } finally {
-                // Reset button
-                isProcessing = false;
-                captureBtn.disabled = false;
-                captureBtn.textContent = '📸 Capture & Process Hand';
+                this.updateFPS();
             }
-        }
-
-        function showState(state) {
-            // Hide all states
-            defaultState.classList.add('hidden');
-            processingState.classList.add('hidden');
-            resultsState.classList.add('hidden');
-            errorState.classList.add('hidden');
             
-            // Show requested state
-            switch(state) {
-                case 'processing':
-                    processingState.classList.remove('hidden');
-                    break;
-                case 'results':
-                    resultsState.classList.remove('hidden');
-                    resultsState.classList.add('result-fade-in');
-                    break;
-                case 'error':
-                    errorState.classList.remove('hidden');
-                    break;
-                default:
-                    defaultState.classList.remove('hidden');
+            drawFingertips() {
+                const { thumb, indexPip, indexTip } = this.fingertips;
+                
+                // Draw connections
+                this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.moveTo(indexPip.x, indexPip.y);
+                this.ctx.lineTo(indexTip.x, indexTip.y);
+                this.ctx.stroke();
+                
+                // Draw fingertip points
+                this.drawPoint(thumb.x, thumb.y, '#FCD34D', 8); // Yellow - thumb
+                this.drawPoint(indexPip.x, indexPip.y, '#3B82F6', 6); // Blue - PIP
+                this.drawPoint(indexTip.x, indexTip.y, '#EF4444', 8); // Red - tip
+                
+                // Draw labels
+                this.ctx.fillStyle = 'white';
+                this.ctx.font = 'bold 12px sans-serif';
+                this.ctx.fillText('T', thumb.x - 6, thumb.y + 4);
+                this.ctx.fillText('P', indexPip.x - 6, indexPip.y + 4);
+                this.ctx.fillText('I', indexTip.x - 6, indexTip.y + 4);
             }
-        }
-
-        function showError(message) {
-            errorMessage.textContent = message;
-            showState('error');
-        }
-
-        function updateStatus(message, color) {
-            statusDiv.textContent = message;
-            statusDiv.className = `text-center p-3 rounded-lg`;
             
-            switch(color) {
-                case 'green':
-                    statusDiv.classList.add('bg-green-50', 'text-green-700');
-                    break;
-                case 'red':
-                    statusDiv.classList.add('bg-red-50', 'text-red-700');
-                    break;
-                case 'orange':
-                    statusDiv.classList.add('bg-orange-50', 'text-orange-700');
-                    break;
-                default:
-                    statusDiv.classList.add('bg-blue-50', 'text-blue-700');
+            drawPoint(x, y, color, size = 6) {
+                this.ctx.fillStyle = color;
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, size, 0, 2 * Math.PI);
+                this.ctx.fill();
+                
+                // White border
+                this.ctx.strokeStyle = 'white';
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+            }
+            
+            updateCoordinateDisplays() {
+                const { thumb, indexPip, indexTip } = this.fingertips;
+                
+                this.thumbCoords.textContent = thumb ? 
+                    `(${Math.round(thumb.x)}, ${Math.round(thumb.y)})` : 'Not detected';
+                this.pipCoords.textContent = indexPip ? 
+                    `(${Math.round(indexPip.x)}, ${Math.round(indexPip.y)})` : 'Not detected';
+                this.tipCoords.textContent = indexTip ? 
+                    `(${Math.round(indexTip.x)}, ${Math.round(indexTip.y)})` : 'Not detected';
+            }
+            
+            updateRobotMapping() {
+                const { thumb, indexPip, indexTip } = this.fingertips;
+                
+                if (thumb && indexPip && indexTip) {
+                    // Simple mapping for robot control preview
+                    const x = ((indexTip.x / this.outputCanvas.width) - 0.5) * 2; // -1 to 1
+                    const y = ((indexTip.y / this.outputCanvas.height) - 0.5) * -2; // -1 to 1 (inverted Y)
+                    const z = Math.max(0, indexTip.z * 2); // 0 to 2
+                    
+                    // Gripper control based on thumb-index distance
+                    const distance = Math.sqrt(
+                        Math.pow(thumb.x - indexTip.x, 2) + 
+                        Math.pow(thumb.y - indexTip.y, 2)
+                    );
+                    const gripper = distance < 50 ? 'Closed' : 'Open';
+                    
+                    this.robotX.textContent = x.toFixed(2);
+                    this.robotY.textContent = y.toFixed(2);
+                    this.robotZ.textContent = z.toFixed(2);
+                    this.robotGripper.textContent = gripper;
+                } else {
+                    this.robotX.textContent = '0.0';
+                    this.robotY.textContent = '0.0';
+                    this.robotZ.textContent = '0.0';
+                    this.robotGripper.textContent = 'Open';
+                }
+            }
+            
+            startFPSCounter() {
+                this.frameCount = 0;
+                this.lastTime = performance.now();
+            }
+            
+            updateFPS() {
+                this.frameCount++;
+                const now = performance.now();
+                if (now - this.lastTime >= 1000) {
+                    this.fps = Math.round(this.frameCount * 1000 / (now - this.lastTime));
+                    this.fpsDisplay.textContent = `${this.fps} FPS`;
+                    this.frameCount = 0;
+                    this.lastTime = now;
+                }
+            }
+            
+            async captureAndProcess() {
+                // Keep the original WiLoR functionality
+                if (!this.isTracking) return;
+                
+                this.updateStatus('Processing with WiLoR...', 'orange');
+                
+                try {
+                    // Capture current frame
+                    const canvas = this.captureCanvas;
+                    const context = canvas.getContext('2d');
+                    
+                    canvas.width = this.videoElement.videoWidth;
+                    canvas.height = this.videoElement.videoHeight;
+                    context.drawImage(this.videoElement, 0, 0);
+                    
+                    // Convert to blob
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+                    
+                    // Create form data
+                    const formData = new FormData();
+                    formData.append('file', blob, 'capture.jpg');
+                    
+                    // Send to API (when backend is available)
+                    const response = await fetch('/api/process-hand', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        this.updateStatus('✅ WiLoR processing complete!', 'green');
+                        // Handle WiLoR results...
+                    } else {
+                        this.updateStatus('❌ No hand detected in WiLoR', 'red');
+                    }
+                    
+                } catch (error) {
+                    console.log('WiLoR backend not available - using live tracking only');
+                    this.updateStatus('📱 Live tracking active (WiLoR offline)', 'blue');
+                }
+            }
+            
+            updateStatus(message, color) {
+                this.statusDiv.textContent = message;
+                this.statusDiv.className = 'text-center p-3 rounded-lg';
+                
+                switch(color) {
+                    case 'green':
+                        this.statusDiv.classList.add('bg-green-50', 'text-green-700');
+                        break;
+                    case 'red':
+                        this.statusDiv.classList.add('bg-red-50', 'text-red-700');
+                        break;
+                    case 'orange':
+                        this.statusDiv.classList.add('bg-orange-50', 'text-orange-700');
+                        break;
+                    default:
+                        this.statusDiv.classList.add('bg-blue-50', 'text-blue-700');
+                }
             }
         }
+
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            window.handTracker = new HandTeleopTracker();
+        });
 
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
+            if (window.handTracker && window.handTracker.camera) {
+                window.handTracker.camera.stop();
             }
         });
     </script>
