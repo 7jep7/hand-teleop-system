@@ -8,6 +8,93 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+    
+    <!-- Three.js and Physics Libraries -->
+    <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"></script>
+    <!-- OrbitControls as inline script -->
+    <script>
+        // Simple camera controls to replace OrbitControls if needed
+        class SimpleCameraControls {
+            constructor(camera, domElement) {
+                this.camera = camera;
+                this.domElement = domElement;
+                this.target = new THREE.Vector3(0, 0, 0.3);
+                this.enableDamping = true;
+                this.dampingFactor = 0.05;
+                
+                this.spherical = new THREE.Spherical();
+                this.sphericalDelta = new THREE.Spherical();
+                
+                this.isMouseDown = false;
+                this.mouseButtons = { LEFT: 0, MIDDLE: 1, RIGHT: 2 };
+                
+                this.setupEventListeners();
+            }
+            
+            setupEventListeners() {
+                this.domElement.addEventListener('mousedown', (e) => this.onMouseDown(e));
+                this.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
+                this.domElement.addEventListener('mouseup', (e) => this.onMouseUp(e));
+                this.domElement.addEventListener('wheel', (e) => this.onMouseWheel(e));
+            }
+            
+            onMouseDown(event) {
+                this.isMouseDown = true;
+                this.lastMousePosition = { x: event.clientX, y: event.clientY };
+            }
+            
+            onMouseMove(event) {
+                if (!this.isMouseDown) return;
+                
+                const deltaX = event.clientX - this.lastMousePosition.x;
+                const deltaY = event.clientY - this.lastMousePosition.y;
+                
+                this.sphericalDelta.theta -= deltaX * 0.01;
+                this.sphericalDelta.phi -= deltaY * 0.01;
+                
+                this.lastMousePosition = { x: event.clientX, y: event.clientY };
+            }
+            
+            onMouseUp(event) {
+                this.isMouseDown = false;
+            }
+            
+            onMouseWheel(event) {
+                const scale = event.deltaY > 0 ? 1.1 : 0.9;
+                this.camera.position.multiplyScalar(scale);
+            }
+            
+            update() {
+                // Simple orbit behavior
+                if (this.sphericalDelta.theta !== 0 || this.sphericalDelta.phi !== 0) {
+                    const offset = new THREE.Vector3().copy(this.camera.position).sub(this.target);
+                    this.spherical.setFromVector3(offset);
+                    
+                    this.spherical.theta += this.sphericalDelta.theta;
+                    this.spherical.phi += this.sphericalDelta.phi;
+                    
+                    this.spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.spherical.phi));
+                    
+                    offset.setFromSpherical(this.spherical);
+                    this.camera.position.copy(this.target).add(offset);
+                    this.camera.lookAt(this.target);
+                    
+                    if (this.enableDamping) {
+                        this.sphericalDelta.theta *= (1 - this.dampingFactor);
+                        this.sphericalDelta.phi *= (1 - this.dampingFactor);
+                    } else {
+                        this.sphericalDelta.set(0, 0, 0);
+                    }
+                }
+            }
+        }
+        
+        // Make it available on THREE namespace for compatibility
+        if (typeof THREE !== 'undefined') {
+            THREE.OrbitControls = SimpleCameraControls;
+        }
+    </script>
     <style>
         .camera-container {
             position: relative;
@@ -114,50 +201,64 @@
                 </div>
                 
                 <!-- Robot Visualization Area -->
-                <div class="grid lg:grid-cols-3 gap-6">
+                <div class="space-y-6">
                     <!-- 3D Robot View -->
-                    <div class="lg:col-span-2">
-                        <div class="bg-gray-900 rounded-lg h-96 flex items-center justify-center">
-                            <div id="robotCanvas" class="w-full h-full rounded-lg">
-                                <!-- Three.js robot visualization will go here -->
-                                <div class="flex items-center justify-center h-full text-white">
-                                    <div class="text-center">
-                                        <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 9.172V5L8 4z"></path>
-                                        </svg>
-                                        <p class="text-gray-400">3D Robot Visualization</p>
-                                        <p class="text-sm text-gray-500 mt-1">Loading...</p>
-                                    </div>
+                    <div class="w-full">
+                        <div class="bg-gray-900 rounded-lg h-80 md:h-96 relative overflow-hidden">
+                            <canvas id="robotCanvas" class="w-full h-full rounded-lg"></canvas>
+                            <div id="robotLoadingOverlay" class="absolute inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center text-white">
+                                <div class="text-center">
+                                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                                    <div>Loading robot model...</div>
                                 </div>
                             </div>
                         </div>
                     </div>
                     
                     <!-- Robot Status & Controls -->
-                    <div class="space-y-4">
-                        <!-- Connection Status -->
-                        <div class="bg-gray-50 rounded-lg p-4">
-                            <h4 class="font-semibold text-gray-800 mb-3">Robot Status</h4>
-                            <div class="space-y-2 text-sm">
+                    <!-- Control Buttons -->
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+                        <button id="robotTrackingToggle" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition-colors">
+                            Start Hand Tracking
+                        </button>
+                        <button id="connectRobot" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition-colors">
+                            Enable Hand Control
+                        </button>
+                        <button id="homeRobot" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition-colors">
+                            Reset Position
+                        </button>
+                        <button id="addObject" class="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition-colors">
+                            Demo Movement
+                        </button>
+                        <button id="emergencyStop" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition-colors col-span-2 md:col-span-1">
+                            Stop All Motion
+                        </button>
+                    </div>
+                    
+                    <div class="grid md:grid-cols-3 gap-4">
+                        <!-- Robot Status -->
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <h4 class="font-semibold text-gray-800 mb-2 text-sm">System Status</h4>
+                            <div class="space-y-1 text-xs">
                                 <div class="flex justify-between">
-                                    <span class="text-gray-600">Connection:</span>
-                                    <span id="robotConnection" class="font-medium text-red-600">Disconnected</span>
+                                    <span class="text-gray-600">Hand Tracking:</span>
+                                    <span id="robotConnection" class="font-medium text-red-600">Inactive</span>
                                 </div>
                                 <div class="flex justify-between">
-                                    <span class="text-gray-600">Model:</span>
+                                    <span class="text-gray-600">Robot Model:</span>
                                     <span id="robotModel" class="font-medium text-gray-800">SO-101</span>
                                 </div>
                                 <div class="flex justify-between">
-                                    <span class="text-gray-600">Tracking:</span>
-                                    <span id="trackingStatus" class="font-medium text-gray-600">Stopped</span>
+                                    <span class="text-gray-600">Control Mode:</span>
+                                    <span id="trackingStatus" class="font-medium text-gray-600">Simulation</span>
                                 </div>
                             </div>
                         </div>
                         
                         <!-- Joint Positions -->
-                        <div class="bg-gray-50 rounded-lg p-4">
-                            <h4 class="font-semibold text-gray-800 mb-3">Joint Positions</h4>
-                            <div class="space-y-2 text-xs">
+                        <div class="bg-gray-50 rounded-lg p-3">
+                            <h4 class="font-semibold text-gray-800 mb-2 text-sm">Joint Positions</h4>
+                            <div class="space-y-1 text-xs">
                                 <div class="flex justify-between">
                                     <span class="text-gray-600">Base:</span>
                                     <span id="joint0" class="font-mono text-gray-800">0.0°</span>
@@ -186,9 +287,9 @@
                         </div>
                         
                         <!-- End Effector Position -->
-                        <div class="bg-blue-50 rounded-lg p-4">
-                            <h4 class="font-semibold text-blue-800 mb-3">End Effector</h4>
-                            <div class="space-y-2 text-xs">
+                        <div class="bg-blue-50 rounded-lg p-3">
+                            <h4 class="font-semibold text-blue-800 mb-2 text-sm">End Effector</h4>
+                            <div class="space-y-1 text-xs">
                                 <div class="flex justify-between">
                                     <span class="text-blue-600">X Position:</span>
                                     <span id="endEffectorX" class="font-mono text-blue-800">0.000 m</span>
@@ -206,19 +307,6 @@
                                     <span id="gripperState" class="font-mono text-blue-800">Open</span>
                                 </div>
                             </div>
-                        </div>
-                        
-                        <!-- Control Buttons -->
-                        <div class="space-y-2">
-                            <button id="connectRobot" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors">
-                                Connect Robot
-                            </button>
-                            <button id="homeRobot" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors" disabled>
-                                Home Position
-                            </button>
-                            <button id="emergencyStop" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors">
-                                Emergency Stop
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -259,12 +347,12 @@
                 
                 <!-- Controls -->
                 <div class="space-y-4">
-                    <button id="startCamera" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn" onclick="console.log('Button clicked via onclick!'); if(window.handTracker) window.handTracker.toggleTracking(); else console.error('handTracker not found!');">
-                        📹 Start Live Tracking
+                    <button id="startCamera" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn">
+                        Start Live Tracking
                     </button>
                     
                     <button id="captureBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
-                        📸 Capture & Process (WiLoR)
+                        Capture & Process (WiLoR)
                     </button>
                     
                     <!-- Fingertip Display -->
@@ -397,6 +485,432 @@
     </div>
 
     <script>
+        // 3D Robot Visualization with Three.js and Cannon.js Physics
+        class RobotVisualization {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.loadingOverlay = document.getElementById('robotLoadingOverlay');
+                
+                // Three.js setup
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.controls = null;
+                
+                // Physics setup
+                this.world = null;
+                this.robotBodies = [];
+                
+                // Robot state
+                this.robotType = 'so-101';
+                this.jointAngles = [0, 0, 0, 0, 0, 0];
+                this.endEffectorTarget = { x: 0, y: 0, z: 0.5 };
+                
+                // Robot parts
+                this.robotParts = {};
+                this.joints = [];
+                
+                // Objects in scene
+                this.objects = [];
+                
+                this.init();
+            }
+            
+            async init() {
+                try {
+                    console.log('Initializing robot visualization...');
+                    console.log('THREE available:', typeof THREE);
+                    console.log('CANNON available:', typeof CANNON);
+                    console.log('Canvas element:', this.canvas);
+                    
+                    if (!this.canvas) {
+                        throw new Error('Canvas element not found');
+                    }
+                    
+                    if (typeof THREE === 'undefined') {
+                        throw new Error('THREE.js not loaded');
+                    }
+                    
+                    this.initThreeJS();
+                    console.log('Three.js initialized successfully');
+                    
+                    // Skip physics for minimal professional setup
+                    this.world = null;
+                    console.log('Physics disabled for minimal setup');
+                    
+                    await this.loadRobot();
+                    console.log('Robot loaded successfully');
+                    
+                    this.setupLighting();
+                    console.log('Lighting setup complete');
+                    
+                    this.setupEnvironment();
+                    console.log('Environment setup complete');
+                    
+                    this.animate();
+                    console.log('Animation started');
+                    
+                    // Hide loading overlay
+                    if (this.loadingOverlay) {
+                        this.loadingOverlay.style.display = 'none';
+                    }
+                    
+                    console.log('Robot visualization initialized successfully');
+                } catch (error) {
+                    console.error('Error initializing robot visualization:', error);
+                    console.error('Error stack:', error.stack);
+                    this.showError(`Failed to load robot visualization: ${error.message}`);
+                }
+            }
+            
+            initThreeJS() {
+                // Scene - clean bright background
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0xf8fafc); // Very light gray/white
+                
+                // Camera - positioned for nice robot view
+                this.camera = new THREE.PerspectiveCamera(
+                    45, // Narrower FOV for more professional look
+                    this.canvas.clientWidth / this.canvas.clientHeight,
+                    0.1,
+                    100
+                );
+                this.camera.position.set(0.8, 0.8, 0.7);
+                this.camera.lookAt(0, 0, 0.25);
+                
+                // Renderer
+                this.renderer = new THREE.WebGLRenderer({ 
+                    canvas: this.canvas,
+                    antialias: true,
+                    alpha: true
+                });
+                this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                
+                // Controls - disabled for fixed professional view
+                this.controls = null; // Disable camera controls for stationary robot view
+                console.log('Camera controls disabled for fixed view');
+                
+                // Handle resize
+                window.addEventListener('resize', () => this.onWindowResize());
+            }
+            
+            initPhysics() {
+                // Cannon.js world
+                this.world = new CANNON.World();
+                this.world.gravity.set(0, 0, -9.82); // Z-up coordinate system
+                this.world.broadphase = new CANNON.NaiveBroadphase();
+                this.world.solver.iterations = 10;
+                
+                // Ground plane
+                const groundShape = new CANNON.Plane();
+                const groundBody = new CANNON.Body({ mass: 0 });
+                groundBody.addShape(groundShape);
+                groundBody.position.set(0, 0, 0);
+                this.world.add(groundBody);
+            }
+            
+            async loadRobot() {
+                // Create a procedural robot model (SO-101 style)
+                this.createProceduralRobot();
+            }
+            
+            createProceduralRobot() {
+                const robotGroup = new THREE.Group();
+                robotGroup.name = 'robot';
+                
+                // Professional material colors
+                const baseMaterial = new THREE.MeshLambertMaterial({ color: 0x2d3748 }); // Dark blue-gray
+                const linkMaterial = new THREE.MeshLambertMaterial({ color: 0x4a5568 }); // Medium gray
+                const jointMaterial = new THREE.MeshLambertMaterial({ color: 0x1a202c }); // Very dark gray
+                const endEffectorMaterial = new THREE.MeshLambertMaterial({ color: 0xe53e3e }); // Distinct red for end-effector
+                
+                // Create nested groups for proper joint hierarchy
+                const baseGroup = new THREE.Group();
+                const link1Group = new THREE.Group();
+                const link2Group = new THREE.Group();
+                const link3Group = new THREE.Group();
+                const wristGroup = new THREE.Group();
+                
+                // Base (fixed)
+                const baseGeometry = new THREE.CylinderGeometry(0.06, 0.08, 0.08, 16);
+                const base = new THREE.Mesh(baseGeometry, baseMaterial);
+                base.position.set(0, 0, 0.04);
+                baseGroup.add(base);
+                
+                // Link 1 - Shoulder joint (rotates with base)
+                const link1Geometry = new THREE.CylinderGeometry(0.04, 0.04, 0.12, 12);
+                const link1 = new THREE.Mesh(link1Geometry, jointMaterial);
+                link1.position.set(0, 0, 0.10); // Relative to base
+                link1Group.add(link1);
+                
+                // Link 2 - Upper arm (connected to link1)
+                const link2Geometry = new THREE.BoxGeometry(0.25, 0.035, 0.05);
+                const link2 = new THREE.Mesh(link2Geometry, linkMaterial);
+                link2.position.set(0.125, 0, 0.06); // Relative to link1
+                link2Group.add(link2);
+                
+                // Elbow joint (at end of upper arm)
+                const elbowGeometry = new THREE.SphereGeometry(0.025, 12, 8);
+                const elbow = new THREE.Mesh(elbowGeometry, jointMaterial);
+                elbow.position.set(0.25, 0, 0.06); // At end of upper arm
+                link2Group.add(elbow);
+                
+                // Link 3 - Forearm (connected to elbow)
+                const link3Geometry = new THREE.BoxGeometry(0.18, 0.03, 0.04);
+                const link3 = new THREE.Mesh(link3Geometry, linkMaterial);
+                link3.position.set(0.09, 0, 0); // Relative to elbow
+                link3Group.add(link3);
+                
+                // Wrist assembly (at end of forearm)
+                const wristGeometry = new THREE.BoxGeometry(0.06, 0.04, 0.04);
+                const wrist = new THREE.Mesh(wristGeometry, jointMaterial);
+                wrist.position.set(0.18, 0, 0); // At end of forearm
+                wristGroup.add(wrist);
+                
+                // End effector - distinct color
+                const gripperBase = new THREE.BoxGeometry(0.05, 0.025, 0.08);
+                const gripper = new THREE.Mesh(gripperBase, endEffectorMaterial);
+                gripper.position.set(0.05, 0, 0); // Relative to wrist
+                wristGroup.add(gripper);
+                
+                // Gripper fingers - same end-effector color
+                const fingerGeometry = new THREE.BoxGeometry(0.02, 0.008, 0.025);
+                const finger1 = new THREE.Mesh(fingerGeometry, endEffectorMaterial);
+                finger1.position.set(0.075, 0.015, 0);
+                wristGroup.add(finger1);
+                
+                const finger2 = new THREE.Mesh(fingerGeometry, endEffectorMaterial);
+                finger2.position.set(0.075, -0.015, 0);
+                wristGroup.add(finger2);
+                
+                // Build hierarchy: base -> link1 -> link2 -> link3 -> wrist
+                baseGroup.add(link1Group);
+                link1Group.position.set(0, 0, 0.08);
+                
+                link1Group.add(link2Group);
+                link2Group.position.set(0, 0, 0.06);
+                
+                link2Group.add(link3Group);
+                link3Group.position.set(0.25, 0, 0);
+                
+                link3Group.add(wristGroup);
+                wristGroup.position.set(0.18, 0, 0);
+                
+                robotGroup.add(baseGroup);
+                
+                // Store robot parts and groups for animation
+                this.robotParts = {
+                    base: base,
+                    baseGroup: baseGroup,
+                    link1: link1,
+                    link1Group: link1Group,
+                    link2: link2,
+                    link2Group: link2Group,
+                    elbow: elbow,
+                    link3: link3,
+                    link3Group: link3Group,
+                    wrist: wrist,
+                    wristGroup: wristGroup,
+                    gripper: gripper,
+                    finger1: finger1,
+                    finger2: finger2
+                };
+                
+                this.scene.add(robotGroup);
+            }
+            
+            addRobotPhysics() {
+                // Only add physics if world is available
+                if (!this.world) return;
+                
+                // Add physics bodies for each robot part
+                // This is simplified - in a real implementation you'd have proper joint constraints
+                
+                try {
+                    // Base physics body
+                    const baseShape = new CANNON.Cylinder(0.08, 0.1, 0.1, 8);
+                    const baseBody = new CANNON.Body({ mass: 10 });
+                    baseBody.addShape(baseShape);
+                    baseBody.position.set(0, 0, 0.05);
+                    this.world.add(baseBody);
+                    this.robotBodies.push(baseBody);
+                } catch (error) {
+                    console.warn('Failed to add robot physics:', error.message);
+                }
+            }
+            
+            setupLighting() {
+                // Clean, professional lighting setup
+                
+                // Soft ambient light for overall illumination
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                this.scene.add(ambientLight);
+                
+                // Main directional light (key light)
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(3, 4, 5);
+                this.scene.add(directionalLight);
+                
+                // Fill light from opposite side
+                const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+                fillLight.position.set(-2, -1, 3);
+                this.scene.add(fillLight);
+            }
+            
+            setupEnvironment() {
+                // Very minimal environment - just a subtle ground reference
+                
+                // Simple ground plane - very subtle
+                const groundGeometry = new THREE.PlaneGeometry(3, 3);
+                const groundMaterial = new THREE.MeshLambertMaterial({ 
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.1
+                });
+                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                ground.rotation.x = -Math.PI / 2;
+                ground.position.z = 0;
+                this.scene.add(ground);
+                
+                // Minimal grid - very subtle reference
+                const gridHelper = new THREE.GridHelper(1, 10, 0xe2e8f0, 0xf1f5f9);
+                gridHelper.rotation.x = Math.PI / 2;
+                gridHelper.position.z = 0.001;
+                this.scene.add(gridHelper);
+                
+                // Small coordinate frame for reference
+                const axesHelper = new THREE.AxesHelper(0.15);
+                axesHelper.position.set(-0.4, -0.4, 0.01);
+                this.scene.add(axesHelper);
+            }
+            
+            updateRobotPose(jointAngles) {
+                this.jointAngles = jointAngles;
+                
+                if (!this.robotParts.baseGroup) return;
+                
+                // Proper forward kinematics with joint hierarchy
+                const [j0, j1, j2, j3, j4, j5] = jointAngles.map(a => a * Math.PI / 180);
+                
+                // Joint 0: Base rotation (around Z-axis)
+                this.robotParts.baseGroup.rotation.z = j0;
+                
+                // Joint 1: Shoulder (around Y-axis, relative to base)
+                this.robotParts.link1Group.rotation.y = j1;
+                
+                // Joint 2: Elbow (around Y-axis, relative to upper arm)
+                this.robotParts.link2Group.rotation.y = j2;
+                
+                // Joint 3: Forearm twist (around X-axis, relative to forearm)
+                this.robotParts.link3Group.rotation.x = j3;
+                
+                // Joint 4: Wrist bend (around Y-axis, relative to forearm)
+                this.robotParts.wristGroup.rotation.y = j4;
+                
+                // Joint 5: Wrist twist (around X-axis, relative to wrist)
+                this.robotParts.wristGroup.rotation.x += j5; // Additive for compound rotation
+            }
+            
+            updateGripperState(isOpen) {
+                if (!this.robotParts.finger1 || !this.robotParts.finger2) return;
+                
+                const offset = isOpen ? 0.015 : 0.005;
+                this.robotParts.finger1.position.y = offset;
+                this.robotParts.finger2.position.y = -offset;
+            }
+            
+            addObject(type = 'cube', position = { x: 0.4, y: 0, z: 0.1 }) {
+                let geometry, material, mesh, body = null;
+                
+                switch (type) {
+                    case 'sphere':
+                        geometry = new THREE.SphereGeometry(0.03, 16, 12);
+                        material = new THREE.MeshPhongMaterial({ color: 0x10b981 });
+                        break;
+                    case 'cube':
+                    default:
+                        geometry = new THREE.BoxGeometry(0.05, 0.05, 0.05);
+                        material = new THREE.MeshPhongMaterial({ color: 0xf59e0b });
+                        break;
+                }
+                
+                mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(position.x, position.y, position.z);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                this.scene.add(mesh);
+                
+                // Add physics body if physics world is available
+                if (this.world) {
+                    try {
+                        const shape = type === 'sphere' ? 
+                            new CANNON.Sphere(0.03) : 
+                            new CANNON.Box(new CANNON.Vec3(0.025, 0.025, 0.025));
+                        body = new CANNON.Body({ mass: 1 });
+                        body.addShape(shape);
+                        body.position.set(position.x, position.y, position.z);
+                        this.world.add(body);
+                    } catch (error) {
+                        console.warn('Failed to add physics body for object:', error.message);
+                        body = null;
+                    }
+                }
+                
+                this.objects.push({ mesh, body });
+                
+                return { mesh, body };
+            }
+            
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                // Update controls
+                if (this.controls) {
+                    this.controls.update();
+                }
+                
+                // Render
+                this.renderer.render(this.scene, this.camera);
+            }
+            
+            onWindowResize() {
+                if (!this.canvas.clientWidth || !this.canvas.clientHeight) return;
+                
+                this.camera.aspect = this.canvas.clientWidth / this.canvas.clientHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
+            }
+            
+            showError(message) {
+                if (this.loadingOverlay) {
+                    this.loadingOverlay.innerHTML = `
+                        <div class="text-center">
+                            <div class="text-red-500 mb-2">⚠️</div>
+                            <div class="text-red-300">${message}</div>
+                        </div>
+                    `;
+                }
+            }
+            
+            getRobotConfig(robotType) {
+                const configs = {
+                    'so-101': { joints: 6, name: 'SO-101' },
+                    'so-100': { joints: 5, name: 'SO-100' },
+                    'koch': { joints: 6, name: 'Koch v1.1' },
+                    'moss': { joints: 4, name: 'MOSS' }
+                };
+                return configs[robotType] || configs['so-101'];
+            }
+            
+            switchRobot(robotType) {
+                this.robotType = robotType;
+                console.log(`Switched to ${robotType} robot model`);
+                // In a full implementation, you'd reload the robot model here
+            }
+        }
+        
         // Client-side hand tracking with MediaPipe
         class HandTeleopTracker {
             constructor() {
@@ -411,6 +925,9 @@
                 this.frameCount = 0;
                 this.lastTime = performance.now();
                 
+                // Robot visualization
+                this.robotViz = null;
+                
                 // DOM elements
                 this.videoElement = document.getElementById('videoElement');
                 this.outputCanvas = document.getElementById('outputCanvas');
@@ -418,6 +935,7 @@
                 this.ctx = this.outputCanvas.getContext('2d');
                 
                 this.initializeElements();
+                this.initializeRobotVisualization();
             }
             
             initializeElements() {
@@ -461,8 +979,10 @@
                 this.robotConnection = document.getElementById('robotConnection');
                 this.robotModel = document.getElementById('robotModel');
                 this.trackingStatus = document.getElementById('trackingStatus');
+                this.robotTrackingToggle = document.getElementById('robotTrackingToggle');
                 this.connectRobot = document.getElementById('connectRobot');
                 this.homeRobot = document.getElementById('homeRobot');
+                this.addObject = document.getElementById('addObject');
                 this.emergencyStop = document.getElementById('emergencyStop');
                 
                 // Joint elements
@@ -543,11 +1063,17 @@
                 }
                 
                 // Robot controls
+                if (this.robotTrackingToggle) {
+                    this.robotTrackingToggle.addEventListener('click', () => this.toggleTracking());
+                }
                 if (this.connectRobot) {
                     this.connectRobot.addEventListener('click', () => this.toggleRobotConnection());
                 }
                 if (this.homeRobot) {
                     this.homeRobot.addEventListener('click', () => this.homeRobot());
+                }
+                if (this.addObject) {
+                    this.addObject.addEventListener('click', () => this.demoMovement());
                 }
                 if (this.emergencyStop) {
                     this.emergencyStop.addEventListener('click', () => this.emergencyStop());
@@ -559,6 +1085,31 @@
                 this.analyticsVisible = true;
                 this.analyticsContent.classList.remove('hidden');
                 this.analyticsChevron.style.transform = 'rotate(180deg)';
+            }
+            
+            async initializeRobotVisualization() {
+                try {
+                    // Wait a bit for DOM to be ready
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    this.robotViz = new RobotVisualization('robotCanvas');
+                    console.log('Robot visualization initialized');
+                    
+                    // Demo robot movements for testing
+                    setTimeout(() => {
+                        if (this.robotViz) {
+                            // Demo some joint movements
+                            this.robotViz.updateRobotPose([15, 20, -30, 0, 0, 0]);
+                            
+                            setTimeout(() => {
+                                this.robotViz.updateRobotPose([0, 0, 0, 0, 0, 0]);
+                            }, 3000);
+                        }
+                    }, 2000);
+                    
+                } catch (error) {
+                    console.error('Failed to initialize robot visualization:', error);
+                }
             }
             
             switchModel(model) {
@@ -601,7 +1152,10 @@
                 // Update joint display based on robot type
                 this.updateJointDisplay(robotType);
                 
-                // TODO: Load different robot model in 3D view
+                // Update 3D robot visualization
+                if (this.robotViz) {
+                    this.robotViz.switchRobot(robotType);
+                }
             }
             
             updateJointDisplay(robotType) {
@@ -658,24 +1212,22 @@
             }
             
             toggleRobotConnection() {
-                const isConnected = this.robotConnection.textContent === 'Connected';
+                const isActive = this.robotConnection.textContent === 'Active';
                 
-                if (isConnected) {
-                    // Disconnect
-                    this.robotConnection.textContent = 'Disconnected';
+                if (isActive) {
+                    // Disable hand control
+                    this.robotConnection.textContent = 'Inactive';
                     this.robotConnection.className = 'font-medium text-red-600';
-                    this.connectRobot.textContent = 'Connect Robot';
-                    this.connectRobot.className = 'w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors';
-                    this.homeRobot.disabled = true;
-                    this.updateStatus('Robot disconnected', 'red');
+                    this.connectRobot.textContent = 'Enable Hand Control';
+                    this.connectRobot.className = 'w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors';
+                    this.updateStatus('Hand control disabled', 'red');
                 } else {
-                    // Connect
-                    this.robotConnection.textContent = 'Connected';
+                    // Enable hand control
+                    this.robotConnection.textContent = 'Active';
                     this.robotConnection.className = 'font-medium text-green-600';
-                    this.connectRobot.textContent = 'Disconnect Robot';
+                    this.connectRobot.textContent = 'Disable Hand Control';
                     this.connectRobot.className = 'w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors';
-                    this.homeRobot.disabled = false;
-                    this.updateStatus('Robot connected successfully', 'green');
+                    this.updateStatus('Hand control enabled', 'green');
                 }
             }
             
@@ -686,6 +1238,11 @@
                         this.joints[index].textContent = `${angle.toFixed(1)}°`;
                     }
                 });
+                
+                // Update 3D robot visualization
+                if (this.robotViz) {
+                    this.robotViz.updateRobotPose(angles);
+                }
             }
             
             updateEndEffectorPosition(x, y, z, gripper) {
@@ -693,6 +1250,11 @@
                 this.endEffectorY.textContent = `${y.toFixed(3)} m`;
                 this.endEffectorZ.textContent = `${z.toFixed(3)} m`;
                 this.gripperState.textContent = gripper;
+                
+                // Update 3D robot gripper
+                if (this.robotViz) {
+                    this.robotViz.updateGripperState(gripper === 'Open');
+                }
             }
             
             stopLiveTracking() {
@@ -814,9 +1376,15 @@
                     
                     this.isTracking = true;
                     
-                    // Update UI
-                    this.startBtn.textContent = '⏹️ Stop Tracking';
+                    // Update UI buttons (both analytics and robot panel)
+                    this.startBtn.textContent = 'Stop Tracking';
                     this.startBtn.className = 'w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn';
+                    
+                    if (this.robotTrackingToggle) {
+                        this.robotTrackingToggle.textContent = 'Stop Hand Tracking';
+                        this.robotTrackingToggle.className = 'w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors';
+                    }
+                    
                     this.captureBtn.disabled = false;
                     
                     if (this.fingertipData) this.fingertipData.classList.remove('hidden');
@@ -920,9 +1488,15 @@
                 // Clear canvas
                 this.ctx.clearRect(0, 0, this.outputCanvas.width, this.outputCanvas.height);
                 
-                // Update UI
-                this.startBtn.textContent = '� Start Live Tracking';
+                // Update UI buttons (both analytics and robot panel)
+                this.startBtn.textContent = 'Start Live Tracking';
                 this.startBtn.className = 'w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn';
+                
+                if (this.robotTrackingToggle) {
+                    this.robotTrackingToggle.textContent = 'Start Hand Tracking';
+                    this.robotTrackingToggle.className = 'w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors';
+                }
+                
                 this.captureBtn.disabled = true;
                 
                 this.fingertipData.classList.add('hidden');
@@ -1156,6 +1730,40 @@
                         this.updateStatus('📱 WiLoR offline - live tracking active', 'blue');
                     }
                 }
+            }
+            
+            demoMovement() {
+                if (!this.robotViz) {
+                    this.updateStatus('Robot visualization not available', 'red');
+                    return;
+                }
+                
+                this.updateStatus('Running demo movement sequence...', 'blue');
+                
+                // Demo sequence: move through various joint positions
+                const demoSequence = [
+                    [0, 0, 0, 0, 0, 0],      // Home
+                    [30, 45, -90, 0, 45, 0], // Position 1
+                    [-45, 30, -60, 90, 0, 180], // Position 2
+                    [60, -30, 45, -45, 90, -90], // Position 3
+                    [0, 0, 0, 0, 0, 0]       // Back to home
+                ];
+                
+                let step = 0;
+                const moveNext = () => {
+                    if (step < demoSequence.length) {
+                        const angles = demoSequence[step];
+                        this.robotViz.updateRobotPose(angles);
+                        this.updateJointPositions(angles);
+                        
+                        step++;
+                        setTimeout(moveNext, 1500); // 1.5 second intervals
+                    } else {
+                        this.updateStatus('Demo movement complete', 'green');
+                    }
+                };
+                
+                moveNext();
             }
             
             updateStatus(message, color) {
