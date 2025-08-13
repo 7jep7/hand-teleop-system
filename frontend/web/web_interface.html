@@ -1126,11 +1126,17 @@
                     const formData = new FormData();
                     formData.append('file', blob, 'capture.jpg');
                     
-                    // Send to API (when backend is available)
+                    // Send to API with timeout for faster feedback
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+                    
                     const response = await fetch('/api/process-hand', {
                         method: 'POST',
-                        body: formData
+                        body: formData,
+                        signal: controller.signal
                     });
+                    
+                    clearTimeout(timeoutId);
                     
                     const result = await response.json();
                     
@@ -1142,8 +1148,13 @@
                     }
                     
                 } catch (error) {
-                    console.log('WiLoR backend not available - using live tracking only');
-                    this.updateStatus('📱 Live tracking active (WiLoR offline)', 'blue');
+                    if (error.name === 'AbortError') {
+                        console.log('WiLoR backend request timed out');
+                        this.updateStatus('⚠️ WiLoR backend unavailable - using live tracking', 'orange');
+                    } else {
+                        console.log('WiLoR backend not available:', error.message);
+                        this.updateStatus('📱 WiLoR offline - live tracking active', 'blue');
+                    }
                 }
             }
             
