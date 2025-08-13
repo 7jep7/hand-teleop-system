@@ -48,6 +48,22 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        .analytics-panel {
+            transition: all 0.3s ease-in-out;
+        }
+        
+        .robot-status-connected {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        .joint-value {
+            transition: all 0.2s ease;
+        }
+        
+        .model-toggle {
+            transition: all 0.2s ease;
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -56,10 +72,175 @@
         <div class="text-center mb-8">
             <h1 class="text-4xl font-bold text-gray-900 mb-2">Hand Teleop System</h1>
             <p class="text-gray-600 text-lg">Real-time fingertip tracking for robot control</p>
+            
+            <!-- Model Selection -->
+            <div class="mt-4 flex justify-center items-center space-x-4">
+                <label class="text-sm font-medium text-gray-700">Tracking Model:</label>
+                <div class="flex bg-gray-100 rounded-lg p-1">
+                    <button id="mediapipeBtn" class="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white transition-colors">
+                        MediaPipe
+                    </button>
+                    <button id="wilorBtn" class="px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800 transition-colors">
+                        WiLoR
+                    </button>
+                </div>
+                <span id="modelStatus" class="text-sm text-blue-600 font-medium">Live Tracking</span>
+            </div>
         </div>
         
         <!-- Main Content -->
-        <div class="grid lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
+        <div class="max-w-7xl mx-auto">
+            <!-- Robot Control View (Main/Primary) -->
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-semibold text-gray-800 flex items-center">
+                        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 9.172V5L8 4z"></path>
+                        </svg>
+                        Robot Control
+                    </h2>
+                    
+                    <!-- Robot Model Selection -->
+                    <div class="flex items-center space-x-3">
+                        <label class="text-sm font-medium text-gray-700">Manipulator:</label>
+                        <select id="robotSelect" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="so-101">SO-101 (6-DoF)</option>
+                            <option value="so-100">SO-100 (5-DoF)</option>
+                            <option value="koch">Koch v1.1</option>
+                            <option value="moss">MOSS</option>
+                            <option value="custom">Custom URDF</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Robot Visualization Area -->
+                <div class="grid lg:grid-cols-3 gap-6">
+                    <!-- 3D Robot View -->
+                    <div class="lg:col-span-2">
+                        <div class="bg-gray-900 rounded-lg h-96 flex items-center justify-center">
+                            <div id="robotCanvas" class="w-full h-full rounded-lg">
+                                <!-- Three.js robot visualization will go here -->
+                                <div class="flex items-center justify-center h-full text-white">
+                                    <div class="text-center">
+                                        <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 9.172V5L8 4z"></path>
+                                        </svg>
+                                        <p class="text-gray-400">3D Robot Visualization</p>
+                                        <p class="text-sm text-gray-500 mt-1">Loading...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Robot Status & Controls -->
+                    <div class="space-y-4">
+                        <!-- Connection Status -->
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-gray-800 mb-3">Robot Status</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Connection:</span>
+                                    <span id="robotConnection" class="font-medium text-red-600">Disconnected</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Model:</span>
+                                    <span id="robotModel" class="font-medium text-gray-800">SO-101</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Tracking:</span>
+                                    <span id="trackingStatus" class="font-medium text-gray-600">Stopped</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Joint Positions -->
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-gray-800 mb-3">Joint Positions</h4>
+                            <div class="space-y-2 text-xs">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Base:</span>
+                                    <span id="joint0" class="font-mono text-gray-800">0.0°</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Shoulder:</span>
+                                    <span id="joint1" class="font-mono text-gray-800">0.0°</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Elbow:</span>
+                                    <span id="joint2" class="font-mono text-gray-800">0.0°</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Wrist 1:</span>
+                                    <span id="joint3" class="font-mono text-gray-800">0.0°</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Wrist 2:</span>
+                                    <span id="joint4" class="font-mono text-gray-800">0.0°</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Wrist 3:</span>
+                                    <span id="joint5" class="font-mono text-gray-800">0.0°</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- End Effector Position -->
+                        <div class="bg-blue-50 rounded-lg p-4">
+                            <h4 class="font-semibold text-blue-800 mb-3">End Effector</h4>
+                            <div class="space-y-2 text-xs">
+                                <div class="flex justify-between">
+                                    <span class="text-blue-600">X Position:</span>
+                                    <span id="endEffectorX" class="font-mono text-blue-800">0.000 m</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-blue-600">Y Position:</span>
+                                    <span id="endEffectorY" class="font-mono text-blue-800">0.000 m</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-blue-600">Z Position:</span>
+                                    <span id="endEffectorZ" class="font-mono text-blue-800">0.000 m</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-blue-600">Gripper:</span>
+                                    <span id="gripperState" class="font-mono text-blue-800">Open</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Control Buttons -->
+                        <div class="space-y-2">
+                            <button id="connectRobot" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors">
+                                Connect Robot
+                            </button>
+                            <button id="homeRobot" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors" disabled>
+                                Home Position
+                            </button>
+                            <button id="emergencyStop" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors">
+                                Emergency Stop
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Analytics Panel (Foldable) -->
+            <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                <button id="analyticsToggle" class="w-full px-6 py-4 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between">
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                        <h3 class="text-lg font-semibold text-gray-800">Analytics & Camera View</h3>
+                    </div>
+                    <svg id="analyticsChevron" class="w-5 h-5 text-gray-600 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                
+                <div id="analyticsContent" class="">
+                    <div class="p-6">
+                        <div class="grid lg:grid-cols-2 gap-8">
             <!-- Left Side - Camera Feed -->
             <div class="bg-white rounded-lg shadow-lg p-6">
                 <h2 class="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
@@ -78,7 +259,7 @@
                 
                 <!-- Controls -->
                 <div class="space-y-4">
-                    <button id="startCamera" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn">
+                    <button id="startCamera" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn" onclick="console.log('Button clicked via onclick!'); if(window.handTracker) window.handTracker.toggleTracking(); else console.error('handTracker not found!');">
                         📹 Start Live Tracking
                     </button>
                     
@@ -208,6 +389,10 @@
                     </ul>
                 </div>
             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -218,6 +403,9 @@
                 this.hands = null;
                 this.camera = null;
                 this.isTracking = false;
+                this.currentModel = 'mediapipe'; // 'mediapipe' or 'wilor'
+                this.analyticsVisible = false;
+                this.isBasicCamera = false; // Flag for fallback camera mode
                 this.fingertips = { thumb: null, indexPip: null, indexTip: null };
                 this.fps = 0;
                 this.frameCount = 0;
@@ -233,6 +421,7 @@
             }
             
             initializeElements() {
+                // Original elements
                 this.startBtn = document.getElementById('startCamera');
                 this.captureBtn = document.getElementById('captureBtn');
                 this.statusDiv = document.getElementById('status');
@@ -240,6 +429,57 @@
                 this.defaultState = document.getElementById('defaultState');
                 this.liveState = document.getElementById('liveState');
                 this.fpsDisplay = document.getElementById('fps');
+                
+                // Video elements (may be in collapsed panel initially)
+                this.videoElement = document.getElementById('videoElement');
+                this.outputCanvas = document.getElementById('outputCanvas');
+                this.captureCanvas = document.getElementById('captureCanvas');
+                
+                // Initialize canvas context if available
+                if (this.outputCanvas) {
+                    this.ctx = this.outputCanvas.getContext('2d');
+                }
+                
+                // Log element availability for debugging
+                console.log('Element check:', {
+                    startBtn: !!this.startBtn,
+                    videoElement: !!this.videoElement,
+                    outputCanvas: !!this.outputCanvas,
+                    captureCanvas: !!this.captureCanvas
+                });
+                
+                // New UI elements
+                this.mediapipeBtn = document.getElementById('mediapipeBtn');
+                this.wilorBtn = document.getElementById('wilorBtn');
+                this.modelStatus = document.getElementById('modelStatus');
+                this.robotSelect = document.getElementById('robotSelect');
+                this.analyticsToggle = document.getElementById('analyticsToggle');
+                this.analyticsContent = document.getElementById('analyticsContent');
+                this.analyticsChevron = document.getElementById('analyticsChevron');
+                
+                // Robot status elements
+                this.robotConnection = document.getElementById('robotConnection');
+                this.robotModel = document.getElementById('robotModel');
+                this.trackingStatus = document.getElementById('trackingStatus');
+                this.connectRobot = document.getElementById('connectRobot');
+                this.homeRobot = document.getElementById('homeRobot');
+                this.emergencyStop = document.getElementById('emergencyStop');
+                
+                // Joint elements
+                this.joints = [
+                    document.getElementById('joint0'),
+                    document.getElementById('joint1'),
+                    document.getElementById('joint2'),
+                    document.getElementById('joint3'),
+                    document.getElementById('joint4'),
+                    document.getElementById('joint5')
+                ];
+                
+                // End effector elements
+                this.endEffectorX = document.getElementById('endEffectorX');
+                this.endEffectorY = document.getElementById('endEffectorY');
+                this.endEffectorZ = document.getElementById('endEffectorZ');
+                this.gripperState = document.getElementById('gripperState');
                 
                 // Coordinate displays
                 this.thumbCoords = document.getElementById('thumbCoords');
@@ -254,15 +494,223 @@
                 this.robotGripper = document.getElementById('robotGripper');
                 
                 this.setupEventListeners();
+                this.initializeAnalyticsView();
+                
+                // Initialize robot display with default SO-101
+                this.updateJointDisplay('so-101');
             }
             
             setupEventListeners() {
-                this.startBtn.addEventListener('click', () => this.toggleTracking());
-                this.captureBtn.addEventListener('click', () => this.captureAndProcess());
+                console.log('Setting up event listeners...');
+                console.log('Start button element:', this.startBtn);
+                console.log('Button ID check:', document.getElementById('startCamera'));
+                
+                // Original event listeners
+                if (this.startBtn) {
+                    console.log('Adding click listener to start button');
+                    this.startBtn.addEventListener('click', (event) => {
+                        console.log('Start button clicked! Event:', event);
+                        console.log('Button element at click time:', event.target);
+                        event.preventDefault();
+                        this.toggleTracking();
+                    });
+                    console.log('Click listener added successfully');
+                } else {
+                    console.error('Start button not found during setup!');
+                    console.log('Available elements with startCamera ID:', document.querySelectorAll('#startCamera'));
+                }
+                
+                if (this.captureBtn) {
+                    this.captureBtn.addEventListener('click', () => this.captureAndProcess());
+                }
+                
+                // Model selection
+                if (this.mediapipeBtn) {
+                    this.mediapipeBtn.addEventListener('click', () => this.switchModel('mediapipe'));
+                }
+                if (this.wilorBtn) {
+                    this.wilorBtn.addEventListener('click', () => this.switchModel('wilor'));
+                }
+                
+                // Robot selection
+                if (this.robotSelect) {
+                    this.robotSelect.addEventListener('change', (e) => this.selectRobot(e.target.value));
+                }
+                
+                // Analytics toggle
+                if (this.analyticsToggle) {
+                    this.analyticsToggle.addEventListener('click', () => this.toggleAnalytics());
+                }
+                
+                // Robot controls
+                if (this.connectRobot) {
+                    this.connectRobot.addEventListener('click', () => this.toggleRobotConnection());
+                }
+                if (this.homeRobot) {
+                    this.homeRobot.addEventListener('click', () => this.homeRobot());
+                }
+                if (this.emergencyStop) {
+                    this.emergencyStop.addEventListener('click', () => this.emergencyStop());
+                }
+            }
+            
+            initializeAnalyticsView() {
+                // Start with analytics visible for easier testing
+                this.analyticsVisible = true;
+                this.analyticsContent.classList.remove('hidden');
+                this.analyticsChevron.style.transform = 'rotate(180deg)';
+            }
+            
+            switchModel(model) {
+                this.currentModel = model;
+                
+                // Update button states
+                if (model === 'mediapipe') {
+                    this.mediapipeBtn.className = 'px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white transition-colors';
+                    this.wilorBtn.className = 'px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800 transition-colors';
+                    this.modelStatus.textContent = 'Live Tracking';
+                    this.modelStatus.className = 'text-sm text-blue-600 font-medium';
+                } else {
+                    this.mediapipeBtn.className = 'px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800 transition-colors';
+                    this.wilorBtn.className = 'px-4 py-2 text-sm font-medium rounded-md bg-purple-600 text-white transition-colors';
+                    this.modelStatus.textContent = 'High Quality';
+                    this.modelStatus.className = 'text-sm text-purple-600 font-medium';
+                }
+                
+                // Update tracking mode
+                if (this.isTracking) {
+                    if (model === 'mediapipe') {
+                        this.updateStatus('Switched to MediaPipe - Live tracking', 'blue');
+                    } else {
+                        this.updateStatus('Switched to WiLoR - Capture mode', 'purple');
+                        // Stop live tracking for WiLoR mode
+                        this.stopLiveTracking();
+                    }
+                }
+                
+                console.log(`Switched to ${model} model`);
+            }
+            
+            selectRobot(robotType) {
+                this.robotModel.textContent = robotType.toUpperCase();
+                console.log(`Selected robot: ${robotType}`);
+                
+                // Update robot status
+                this.updateStatus(`Selected ${robotType} manipulator`, 'blue');
+                
+                // Update joint display based on robot type
+                this.updateJointDisplay(robotType);
+                
+                // TODO: Load different robot model in 3D view
+            }
+            
+            updateJointDisplay(robotType) {
+                // Hide all joints first
+                this.joints.forEach(joint => {
+                    if (joint && joint.parentElement) {
+                        joint.parentElement.style.display = 'none';
+                    }
+                });
+                
+                // Define joint configurations for different robots
+                const robotConfigs = {
+                    'so-101': { joints: 6, names: ['Base', 'Shoulder', 'Elbow', 'Wrist 1', 'Wrist 2', 'Wrist 3'] },
+                    'so-100': { joints: 5, names: ['Base', 'Shoulder', 'Elbow', 'Wrist 1', 'Wrist 2'] },
+                    'koch': { joints: 6, names: ['Base', 'Shoulder', 'Elbow', 'Wrist 1', 'Wrist 2', 'Wrist 3'] },
+                    'moss': { joints: 4, names: ['Base', 'Shoulder', 'Elbow', 'Wrist'] },
+                    'custom': { joints: 6, names: ['Joint 1', 'Joint 2', 'Joint 3', 'Joint 4', 'Joint 5', 'Joint 6'] }
+                };
+                
+                const config = robotConfigs[robotType] || robotConfigs['so-101'];
+                
+                // Show and update labels for active joints
+                for (let i = 0; i < config.joints && i < this.joints.length; i++) {
+                    if (this.joints[i] && this.joints[i].parentElement) {
+                        const parentDiv = this.joints[i].parentElement;
+                        parentDiv.style.display = 'flex';
+                        
+                        // Update joint label
+                        const label = parentDiv.querySelector('.text-gray-600');
+                        if (label) {
+                            label.textContent = config.names[i] + ':';
+                        }
+                        
+                        // Reset joint value
+                        this.joints[i].textContent = '0.0°';
+                    }
+                }
+                
+                console.log(`Updated joint display for ${robotType}: ${config.joints} joints`);
+            }
+            
+            toggleAnalytics() {
+                this.analyticsVisible = !this.analyticsVisible;
+                
+                if (this.analyticsVisible) {
+                    this.analyticsContent.classList.remove('hidden');
+                    this.analyticsChevron.style.transform = 'rotate(180deg)';
+                } else {
+                    this.analyticsContent.classList.add('hidden');
+                    this.analyticsChevron.style.transform = 'rotate(0deg)';
+                }
+                
+                console.log(`Analytics view ${this.analyticsVisible ? 'opened' : 'closed'}`);
+            }
+            
+            toggleRobotConnection() {
+                const isConnected = this.robotConnection.textContent === 'Connected';
+                
+                if (isConnected) {
+                    // Disconnect
+                    this.robotConnection.textContent = 'Disconnected';
+                    this.robotConnection.className = 'font-medium text-red-600';
+                    this.connectRobot.textContent = 'Connect Robot';
+                    this.connectRobot.className = 'w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors';
+                    this.homeRobot.disabled = true;
+                    this.updateStatus('Robot disconnected', 'red');
+                } else {
+                    // Connect
+                    this.robotConnection.textContent = 'Connected';
+                    this.robotConnection.className = 'font-medium text-green-600';
+                    this.connectRobot.textContent = 'Disconnect Robot';
+                    this.connectRobot.className = 'w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors';
+                    this.homeRobot.disabled = false;
+                    this.updateStatus('Robot connected successfully', 'green');
+                }
+            }
+            
+            updateJointPositions(angles) {
+                // Update joint display with new angles
+                angles.forEach((angle, index) => {
+                    if (this.joints[index]) {
+                        this.joints[index].textContent = `${angle.toFixed(1)}°`;
+                    }
+                });
+            }
+            
+            updateEndEffectorPosition(x, y, z, gripper) {
+                this.endEffectorX.textContent = `${x.toFixed(3)} m`;
+                this.endEffectorY.textContent = `${y.toFixed(3)} m`;
+                this.endEffectorZ.textContent = `${z.toFixed(3)} m`;
+                this.gripperState.textContent = gripper;
+            }
+            
+            stopLiveTracking() {
+                // Stop MediaPipe live tracking when switching to WiLoR
+                if (this.camera && this.currentModel === 'wilor') {
+                    // Keep camera running but stop MediaPipe processing
+                    console.log('Paused live tracking for WiLoR mode');
+                }
             }
             
             async initializeMediaPipe() {
                 try {
+                    // Check if MediaPipe is loaded
+                    if (typeof Hands === 'undefined' || typeof Camera === 'undefined') {
+                        console.error('MediaPipe not loaded. Trying to use basic camera...');
+                        return await this.initializeBasicCamera();
+                    }
+                    
                     // Initialize MediaPipe Hands
                     this.hands = new Hands({
                         locateFile: (file) => {
@@ -282,7 +730,7 @@
                     // Initialize camera
                     this.camera = new Camera(this.videoElement, {
                         onFrame: async () => {
-                            if (this.isTracking) {
+                            if (this.isTracking && this.hands) {
                                 await this.hands.send({ image: this.videoElement });
                             }
                         },
@@ -293,11 +741,34 @@
                     return true;
                 } catch (error) {
                     console.error('MediaPipe initialization failed:', error);
+                    console.log('Falling back to basic camera...');
+                    return await this.initializeBasicCamera();
+                }
+            }
+            
+            async initializeBasicCamera() {
+                try {
+                    // Fallback: use basic getUserMedia
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: { width: 640, height: 480 }
+                    });
+                    
+                    this.videoElement.srcObject = stream;
+                    this.isBasicCamera = true;
+                    
+                    console.log('Basic camera initialized (no MediaPipe)');
+                    return true;
+                } catch (error) {
+                    console.error('Basic camera initialization failed:', error);
                     return false;
                 }
             }
             
             async toggleTracking() {
+                console.log('toggleTracking called, isTracking:', this.isTracking);
+                console.log('Current analytics visibility:', this.analyticsVisible);
+                console.log('Video element available:', !!this.videoElement);
+                
                 if (!this.isTracking) {
                     await this.startTracking();
                 } else {
@@ -306,15 +777,41 @@
             }
             
             async startTracking() {
-                this.updateStatus('Initializing MediaPipe...', 'blue');
+                // Ensure analytics panel is open so camera elements are accessible
+                if (!this.analyticsVisible) {
+                    this.showAnalytics();
+                    // Give the UI a moment to render the panel
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
                 
-                if (!this.hands && !(await this.initializeMediaPipe())) {
-                    this.updateStatus('❌ Failed to initialize MediaPipe', 'red');
+                this.updateStatus('Initializing camera...', 'blue');
+                
+                // Refresh video elements after panel is open
+                this.refreshVideoElements();
+                
+                // Check if video element is accessible
+                if (!this.videoElement) {
+                    console.error('Video element not found after refresh!');
+                    this.updateStatus('❌ Video element not found', 'red');
+                    return;
+                }
+                
+                if (!this.hands && !this.isBasicCamera && !(await this.initializeMediaPipe())) {
+                    this.updateStatus('❌ Failed to initialize camera', 'red');
                     return;
                 }
                 
                 try {
-                    await this.camera.start();
+                    if (this.camera && this.camera.start) {
+                        // MediaPipe camera
+                        await this.camera.start();
+                    } else if (this.isBasicCamera) {
+                        // Basic camera already initialized
+                        console.log('Using basic camera (already initialized)');
+                    } else {
+                        throw new Error('No camera available');
+                    }
+                    
                     this.isTracking = true;
                     
                     // Update UI
@@ -322,20 +819,95 @@
                     this.startBtn.className = 'w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn';
                     this.captureBtn.disabled = false;
                     
-                    this.fingertipData.classList.remove('hidden');
-                    this.defaultState.classList.add('hidden');
-                    this.liveState.classList.remove('hidden');
-                    this.robotPreview.classList.remove('hidden');
+                    if (this.fingertipData) this.fingertipData.classList.remove('hidden');
+                    if (this.defaultState) this.defaultState.classList.add('hidden');
+                    if (this.liveState) this.liveState.classList.remove('hidden');
+                    if (this.robotPreview) this.robotPreview.classList.remove('hidden');
                     
-                    this.updateStatus('✅ Live tracking active', 'green');
+                    // Update tracking status display
+                    if (this.trackingStatus) {
+                        this.trackingStatus.textContent = 'Active';
+                        this.trackingStatus.className = 'font-medium text-green-600';
+                    }
+                    
+                    if (this.hands) {
+                        this.updateStatus('✅ MediaPipe tracking active', 'green');
+                    } else {
+                        this.updateStatus('✅ Basic camera active (MediaPipe unavailable)', 'blue');
+                        // Start a basic demo for visual feedback
+                        this.startBasicDemo();
+                    }
                     
                     // Start FPS counter
                     this.startFPSCounter();
                     
                 } catch (error) {
                     console.error('Error starting camera:', error);
-                    this.updateStatus('❌ Could not access camera', 'red');
+                    this.updateStatus('❌ Could not access camera: ' + error.message, 'red');
                 }
+            }
+            
+            showAnalytics() {
+                this.analyticsVisible = true;
+                if (this.analyticsContent) {
+                    this.analyticsContent.classList.remove('hidden');
+                    console.log('Analytics content visibility toggled, hidden class removed');
+                }
+                if (this.analyticsChevron) {
+                    this.analyticsChevron.style.transform = 'rotate(180deg)';
+                }
+                
+                // Force a reflow to ensure panel is rendered
+                if (this.analyticsContent) {
+                    this.analyticsContent.offsetHeight;
+                }
+                
+                console.log('Analytics panel opened, forcing video element refresh');
+            }
+            
+            refreshVideoElements() {
+                // Re-get video elements in case they weren't accessible before
+                if (!this.videoElement) {
+                    this.videoElement = document.getElementById('videoElement');
+                }
+                if (!this.outputCanvas) {
+                    this.outputCanvas = document.getElementById('outputCanvas');
+                }
+                if (!this.captureCanvas) {
+                    this.captureCanvas = document.getElementById('captureCanvas');
+                }
+                
+                // Initialize canvas context if now available
+                if (this.outputCanvas && !this.ctx) {
+                    this.ctx = this.outputCanvas.getContext('2d');
+                }
+                
+                console.log('Video elements refreshed:', {
+                    videoElement: !!this.videoElement,
+                    outputCanvas: !!this.outputCanvas,
+                    captureCanvas: !!this.captureCanvas,
+                    ctx: !!this.ctx
+                });
+            }
+            
+            startBasicDemo() {
+                // Simple demo animation when MediaPipe isn't available
+                if (!this.isTracking) return;
+                
+                const time = performance.now() * 0.001;
+                
+                // Simulate hand tracking for demo purposes
+                this.fingertips = {
+                    thumb: { x: 200 + Math.sin(time) * 50, y: 150 + Math.cos(time) * 30, z: 0.3 },
+                    indexPip: { x: 250 + Math.sin(time + 1) * 40, y: 180 + Math.cos(time + 1) * 25, z: 0.35 },
+                    indexTip: { x: 300 + Math.sin(time + 2) * 60, y: 160 + Math.cos(time + 2) * 35, z: 0.25 }
+                };
+                
+                this.updateCoordinateDisplays();
+                this.updateRobotMapping();
+                this.updateFPS();
+                
+                setTimeout(() => this.startBasicDemo(), 33); // ~30 FPS
             }
             
             stopTracking() {
@@ -359,6 +931,12 @@
                 this.robotPreview.classList.add('hidden');
                 
                 this.updateStatus('Tracking stopped', 'blue');
+                
+                // Update tracking status display  
+                if (this.trackingStatus) {
+                    this.trackingStatus.textContent = 'Stopped';
+                    this.trackingStatus.className = 'font-medium text-gray-600';
+                }
             }
             
             onResults(results) {
@@ -469,16 +1047,45 @@
                     );
                     const gripper = distance < 50 ? 'Closed' : 'Open';
                     
-                    this.robotX.textContent = x.toFixed(2);
-                    this.robotY.textContent = y.toFixed(2);
-                    this.robotZ.textContent = z.toFixed(2);
-                    this.robotGripper.textContent = gripper;
+                    // Update robot preview (in analytics)
+                    if (this.robotX) {
+                        this.robotX.textContent = x.toFixed(2);
+                        this.robotY.textContent = y.toFixed(2);
+                        this.robotZ.textContent = z.toFixed(2);
+                        this.robotGripper.textContent = gripper;
+                    }
+                    
+                    // Update main robot display
+                    this.updateEndEffectorPosition(x * 0.5, y * 0.5, z * 0.3, gripper);
+                    
+                    // Generate joint angles (simple IK approximation)
+                    const jointAngles = this.calculateJointAngles(x, y, z);
+                    this.updateJointPositions(jointAngles);
+                    
                 } else {
-                    this.robotX.textContent = '0.0';
-                    this.robotY.textContent = '0.0';
-                    this.robotZ.textContent = '0.0';
-                    this.robotGripper.textContent = 'Open';
+                    // No hand detected - reset to neutral position
+                    if (this.robotX) {
+                        this.robotX.textContent = '0.0';
+                        this.robotY.textContent = '0.0';
+                        this.robotZ.textContent = '0.0';
+                        this.robotGripper.textContent = 'Open';
+                    }
+                    this.updateEndEffectorPosition(0, 0, 0, 'Open');
+                    this.updateJointPositions([0, 0, 0, 0, 0, 0]);
                 }
+            }
+            
+            calculateJointAngles(x, y, z) {
+                // Simple inverse kinematics approximation for 6-DOF arm
+                // This is a simplified version - real IK would be more complex
+                const baseRotation = Math.atan2(y, x) * 180 / Math.PI;
+                const shoulderAngle = Math.atan2(z, Math.sqrt(x*x + y*y)) * 180 / Math.PI;
+                const elbowAngle = -shoulderAngle * 1.5; // Simple relationship
+                const wrist1 = shoulderAngle * 0.5;
+                const wrist2 = 0; // Keep straight for simplicity
+                const wrist3 = baseRotation * 0.3;
+                
+                return [baseRotation, shoulderAngle, elbowAngle, wrist1, wrist2, wrist3];
             }
             
             startFPSCounter() {
@@ -562,7 +1169,26 @@
 
         // Initialize when DOM is loaded
         document.addEventListener('DOMContentLoaded', () => {
-            window.handTracker = new HandTeleopTracker();
+            console.log('DOM loaded, initializing hand tracker...');
+            try {
+                window.handTracker = new HandTeleopTracker();
+                console.log('Hand tracker initialized successfully:', window.handTracker);
+                console.log('Toggle tracking method:', typeof window.handTracker.toggleTracking);
+                
+                // Test button functionality
+                console.log('Start button element:', document.getElementById('startCamera'));
+                
+                // Double-check event listener setup
+                const startBtn = document.getElementById('startCamera');
+                if (startBtn) {
+                    console.log('Button found, adding additional click listener...');
+                    startBtn.addEventListener('click', function() {
+                        console.log('Secondary click listener fired!');
+                    });
+                }
+            } catch (error) {
+                console.error('Error initializing hand tracker:', error);
+            }
         });
 
         // Cleanup on page unload

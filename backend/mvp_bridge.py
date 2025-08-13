@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 MVP Backend Bridge - Connects MediaPipe fingertip detection to web UI
@@ -16,7 +17,7 @@ import os
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.hand_pose.factory import HandPoseEstimatorFactory
+from core.hand_pose.factory import create_estimator
 from core.hand_pose.types import TrackedHandKeypoints
 
 
@@ -36,7 +37,7 @@ class MVPBackendBridge:
         """Initialize MediaPipe and webcam"""
         try:
             # Initialize hand pose estimator (MediaPipe)
-            self.estimator = HandPoseEstimatorFactory.create_estimator('mediapipe')
+            self.estimator = create_estimator('mediapipe')
             print("✓ MediaPipe estimator initialized")
             
             # Initialize webcam
