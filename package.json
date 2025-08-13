@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "three-stdlib": "^2.36.0",
+    "urdf-loader": "^0.12.6"
+  }
+}
