@@ -1087,6 +1087,72 @@
                 this.analyticsChevron.style.transform = 'rotate(180deg)';
             }
             
+            async debugCameraAccess() {
+                console.log('=== Camera Debug Information ===');
+                
+                // Check if navigator exists
+                if (!navigator) {
+                    console.error('Navigator object not available');
+                    return;
+                }
+                
+                // Check mediaDevices support
+                if (!navigator.mediaDevices) {
+                    console.error('navigator.mediaDevices not available');
+                    console.log('This usually means:');
+                    console.log('- You are not using HTTPS (required for camera access)');
+                    console.log('- Your browser does not support modern camera APIs');
+                    return;
+                }
+                
+                // Check getUserMedia specifically
+                if (!navigator.mediaDevices.getUserMedia) {
+                    console.error('navigator.mediaDevices.getUserMedia not available');
+                    return;
+                }
+                
+                console.log('✓ Camera APIs are available');
+                
+                // Check for available devices
+                try {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const cameras = devices.filter(device => device.kind === 'videoinput');
+                    console.log(`Found ${cameras.length} camera(s):`, cameras);
+                } catch (error) {
+                    console.error('Failed to enumerate devices:', error);
+                }
+                
+                // Check permissions if supported
+                if (navigator.permissions) {
+                    try {
+                        const permission = await navigator.permissions.query({ name: 'camera' });
+                        console.log('Camera permission state:', permission.state);
+                    } catch (error) {
+                        console.log('Could not check camera permissions:', error.message);
+                    }
+                }
+                
+                // Test basic camera access
+                try {
+                    console.log('Testing basic camera access...');
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    console.log('✓ Camera access successful');
+                    // Stop the test stream
+                    stream.getTracks().forEach(track => track.stop());
+                } catch (error) {
+                    console.error('✗ Camera access failed:', error.name, error.message);
+                    if (error.name === 'NotAllowedError') {
+                        console.log('- User denied camera permission');
+                    } else if (error.name === 'NotFoundError') {
+                        console.log('- No camera device found');
+                    } else if (error.name === 'NotReadableError') {
+                        console.log('- Camera is being used by another application');
+                    }
+                }
+                
+                console.log('=== End Camera Debug ===');
+            }
+
             async initializeRobotVisualization() {
                 try {
                     // Wait a bit for DOM to be ready
@@ -1310,18 +1376,85 @@
             
             async initializeBasicCamera() {
                 try {
-                    // Fallback: use basic getUserMedia
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        video: { width: 640, height: 480 }
-                    });
+                    // Check if getUserMedia is available
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        throw new Error('Camera API not available. Try using HTTPS or a different browser.');
+                    }
+
+                    // Check current permission state
+                    if (navigator.permissions) {
+                        try {
+                            const permission = await navigator.permissions.query({name: 'camera'});
+                            console.log('Camera permission state:', permission.state);
+                            
+                            if (permission.state === 'denied') {
+                                throw new Error('Camera permission denied. Please allow camera access in browser settings.');
+                            }
+                        } catch (permError) {
+                            console.log('Permission API not supported, continuing with camera request...');
+                        }
+                    }
+
+                    // Try different camera configurations
+                    const configs = [
+                        { video: { width: 640, height: 480, facingMode: 'user' } },
+                        { video: { width: 640, height: 480 } },
+                        { video: true },
+                        { video: { deviceId: 'default' } }
+                    ];
+
+                    let stream = null;
+                    let lastError = null;
+
+                    for (const config of configs) {
+                        try {
+                            console.log('Trying camera config:', config);
+                            stream = await navigator.mediaDevices.getUserMedia(config);
+                            console.log('Camera access successful with config:', config);
+                            break;
+                        } catch (error) {
+                            console.log('Camera config failed:', config, 'Error:', error.message);
+                            lastError = error;
+                        }
+                    }
+
+                    if (!stream) {
+                        throw lastError || new Error('All camera configurations failed');
+                    }
                     
                     this.videoElement.srcObject = stream;
                     this.isBasicCamera = true;
                     
-                    console.log('Basic camera initialized (no MediaPipe)');
-                    return true;
+                    // Wait for video to be ready
+                    return new Promise((resolve) => {
+                        this.videoElement.onloadedmetadata = () => {
+                            console.log('Basic camera initialized successfully');
+                            resolve(true);
+                        };
+                        this.videoElement.onerror = () => {
+                            console.error('Video element error');
+                            resolve(false);
+                        };
+                    });
+                    
                 } catch (error) {
                     console.error('Basic camera initialization failed:', error);
+                    
+                    // Provide specific error messages
+                    let errorMessage = 'Camera access failed: ';
+                    if (error.name === 'NotAllowedError') {
+                        errorMessage += 'Permission denied. Please allow camera access and refresh the page.';
+                    } else if (error.name === 'NotFoundError') {
+                        errorMessage += 'No camera found. Please connect a camera and refresh the page.';
+                    } else if (error.name === 'NotReadableError') {
+                        errorMessage += 'Camera is busy or hardware error. Try disconnecting/reconnecting your external display.';
+                    } else if (error.name === 'OverconstrainedError') {
+                        errorMessage += 'Camera settings not supported. Try a different camera.';
+                    } else {
+                        errorMessage += error.message;
+                    }
+                    
+                    this.updateStatus('❌ ' + errorMessage, 'red');
                     return false;
                 }
             }
@@ -1345,6 +1478,9 @@
                     // Give the UI a moment to render the panel
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
+
+                // Debug camera availability
+                await this.debugCameraAccess();
                 
                 this.updateStatus('Initializing camera...', 'blue');
                 
