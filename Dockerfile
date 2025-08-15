@@ -9,9 +9,10 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    libgl1-mesa-glx \
+    libgl1-mesa-dri \
     libgstreamer1.0-0 \
     libgstreamer-plugins-base1.0-0 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
