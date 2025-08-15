@@ -35,6 +35,11 @@ async def get_index():
     """Serve the main web interface"""
     return FileResponse("frontend/web/web_interface.html")
 
+@app.get("/diagnostics")
+async def get_diagnostics():
+    """Serve camera diagnostics page"""
+    return FileResponse("frontend/web/camera_diagnostics.html")
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""

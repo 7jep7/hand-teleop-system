@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera API Diagnostics</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .test { margin: 20px 0; padding: 15px; border-radius: 8px; }
+        .pass { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .fail { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .warning { background-color: #fff3cd; border: 1px solid #ffeaa7; color: #856404; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #log { background: #f8f9fa; padding: 15px; border-radius: 5px; white-space: pre-wrap; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Camera API Diagnostics</h1>
+    <p>This page will help diagnose camera access issues.</p>
+
+    <div id="results"></div>
+    
+    <button onclick="testCameraAccess()">🎥 Test Camera Access</button>
+    
+    <div id="log"></div>
+
+    <script>
+        const results = document.getElementById('results');
+        const log = document.getElementById('log');
+        
+        function addResult(title, status, message) {
+            const div = document.createElement('div');
+            div.className = `test ${status}`;
+            div.innerHTML = `<strong>${title}:</strong> ${message}`;
+            results.appendChild(div);
+        }
+        
+        function logMessage(message) {
+            log.textContent += new Date().toISOString() + ': ' + message + '\n';
+            console.log(message);
+        }
+        
+        // Run basic diagnostics on page load
+        window.addEventListener('load', function() {
+            runDiagnostics();
+        });
+        
+        function runDiagnostics() {
+            results.innerHTML = '';
+            log.textContent = '';
+            
+            logMessage('Starting browser diagnostics...');
+            
+            // Test 1: Check if we're in a secure context
+            if (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+                addResult('Secure Context', 'pass', 'Running in secure context (HTTPS or localhost)');
+                logMessage('✓ Secure context check passed');
+            } else {
+                addResult('Secure Context', 'fail', 'Not in secure context. Camera API requires HTTPS or localhost.');
+                logMessage('✗ Not in secure context: ' + location.protocol + '//' + location.hostname);
+            }
+            
+            // Test 2: Check navigator object
+            if (typeof navigator !== 'undefined') {
+                addResult('Navigator Object', 'pass', 'Navigator object is available');
+                logMessage('✓ Navigator object available');
+            } else {
+                addResult('Navigator Object', 'fail', 'Navigator object not available');
+                logMessage('✗ Navigator object not available');
+                return;
+            }
+            
+            // Test 3: Check mediaDevices
+            if (navigator.mediaDevices) {
+                addResult('MediaDevices API', 'pass', 'navigator.mediaDevices is available');
+                logMessage('✓ MediaDevices API available');
+            } else {
+                addResult('MediaDevices API', 'fail', 'navigator.mediaDevices not available');
+                logMessage('✗ MediaDevices API not available');
+                
+                // Check for older getUserMedia
+                if (navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia) {
+                    addResult('Legacy getUserMedia', 'warning', 'Legacy getUserMedia API detected. Consider using a polyfill.');
+                    logMessage('⚠ Legacy getUserMedia API detected');
+                } else {
+                    addResult('Legacy getUserMedia', 'fail', 'No getUserMedia API available');
+                    logMessage('✗ No getUserMedia API available');
+                }
+                return;
+            }
+            
+            // Test 4: Check getUserMedia specifically
+            if (navigator.mediaDevices.getUserMedia) {
+                addResult('getUserMedia Method', 'pass', 'navigator.mediaDevices.getUserMedia is available');
+                logMessage('✓ getUserMedia method available');
+            } else {
+                addResult('getUserMedia Method', 'fail', 'navigator.mediaDevices.getUserMedia not available');
+                logMessage('✗ getUserMedia method not available');
+                return;
+            }
+            
+            // Test 5: Browser info
+            const userAgent = navigator.userAgent;
+            addResult('Browser Info', 'pass', userAgent);
+            logMessage('Browser: ' + userAgent);
+            
+            // Test 6: Check permissions API
+            if (navigator.permissions) {
+                addResult('Permissions API', 'pass', 'Permissions API available');
+                logMessage('✓ Permissions API available');
+            } else {
+                addResult('Permissions API', 'warning', 'Permissions API not available');
+                logMessage('⚠ Permissions API not available');
+            }
+        }
+        
+        async function testCameraAccess() {
+            logMessage('Starting camera access test...');
+            
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                logMessage('✗ Camera API not available');
+                addResult('Camera Test', 'fail', 'Camera API not available');
+                return;
+            }
+            
+            try {
+                // Check permissions first
+                if (navigator.permissions) {
+                    try {
+                        const permission = await navigator.permissions.query({name: 'camera'});
+                        logMessage('Camera permission state: ' + permission.state);
+                        addResult('Camera Permission', permission.state === 'granted' ? 'pass' : 'warning', 
+                                 'Permission state: ' + permission.state);
+                    } catch (e) {
+                        logMessage('Could not query camera permission: ' + e.message);
+                    }
+                }
+                
+                // Enumerate devices
+                try {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const cameras = devices.filter(device => device.kind === 'videoinput');
+                    logMessage(`Found ${cameras.length} camera device(s)`);
+                    addResult('Camera Devices', cameras.length > 0 ? 'pass' : 'warning', 
+                             `Found ${cameras.length} camera device(s)`);
+                    cameras.forEach((camera, index) => {
+                        logMessage(`Camera ${index + 1}: ${camera.label || 'Unknown'} (${camera.deviceId})`);
+                    });
+                } catch (e) {
+                    logMessage('Could not enumerate devices: ' + e.message);
+                    addResult('Device Enumeration', 'warning', 'Could not enumerate devices: ' + e.message);
+                }
+                
+                // Test camera access
+                logMessage('Requesting camera access...');
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                logMessage('✓ Camera access granted successfully!');
+                addResult('Camera Access Test', 'pass', 'Camera access successful!');
+                
+                // Clean up
+                stream.getTracks().forEach(track => track.stop());
+                logMessage('Camera stream cleaned up');
+                
+            } catch (error) {
+                logMessage('✗ Camera access failed: ' + error.name + ' - ' + error.message);
+                addResult('Camera Access Test', 'fail', error.name + ': ' + error.message);
+                
+                // Provide specific help based on error type
+                if (error.name === 'NotAllowedError') {
+                    addResult('Solution', 'warning', 'Camera permission denied. Please click the camera icon in your browser address bar and allow camera access.');
+                } else if (error.name === 'NotFoundError') {
+                    addResult('Solution', 'warning', 'No camera found. Please connect a camera and refresh the page.');
+                } else if (error.name === 'NotReadableError') {
+                    addResult('Solution', 'warning', 'Camera is being used by another application. Please close other camera apps and try again.');
+                } else if (error.name === 'OverconstrainedError') {
+                    addResult('Solution', 'warning', 'Camera constraints not supported. Try a different camera configuration.');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
