@@ -8,6 +8,7 @@ class TrackedHandKeypoints:
     thumb_mcp: np.ndarray
     thumb_tip: np.ndarray
     index_base: np.ndarray
+    index_pip: np.ndarray  # MVP: Added index PIP joint
     index_tip: np.ndarray
     middle_base: np.ndarray
     middle_tip: np.ndarray

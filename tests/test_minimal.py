@@ -3,6 +3,11 @@
 Minimal WiLoR test - just import and basic setup
 """
 import sys
+import os
+
+# Add project root to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 print("🔧 Testing imports...")
 
 try:
@@ -13,7 +18,7 @@ except Exception as e:
     sys.exit(1)
 
 try:
-    from hand_teleop.hand_pose.factory import create_estimator
+    from core.hand_pose.factory import create_estimator
     print("✅ Factory imported")
 except Exception as e:
     print(f"❌ Factory failed: {e}")
