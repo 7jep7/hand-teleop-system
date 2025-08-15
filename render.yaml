@@ -1,0 +1,3 @@
+# Render deployment configuration
+build: pip install -r requirements.txt
+start: python backend/web_api.py

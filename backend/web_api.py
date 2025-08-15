@@ -24,9 +24,14 @@ app = FastAPI(title="WiLoR Hand Tracking API", version="1.0.0")
 # Enable CORS for web integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure this for your domain in production
+    allow_origins=[
+        "https://jonaspetersen.com",
+        "https://www.jonaspetersen.com",
+        "http://localhost:3000",  # For local development
+        "http://localhost:5173"   # For Vite dev server
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
