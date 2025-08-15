@@ -1,11 +1,10 @@
 """
 Simplified Web API for deployment
-Uses MediaPipe for hand detection instead of WiLoR for better compatibility
+Uses MediaPipe for hand detection with PIL instead of OpenCV for better compatibility
 """
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import cv2
 import numpy as np
 import base64
 import json
@@ -13,6 +12,8 @@ import os
 import mediapipe as mp
 import uvicorn
 from typing import Dict, Any
+from PIL import Image, ImageDraw
+import io
 
 app = FastAPI(title="Hand Tracking API", version="1.0.0")
 
@@ -61,36 +62,28 @@ async def process_hand(file: UploadFile = File(...)):
         # Read image data
         image_data = await file.read()
         
-        # Convert to OpenCV format
-        nparr = np.frombuffer(image_data, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        # Convert to PIL Image
+        image = Image.open(io.BytesIO(image_data))
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
         
-        if frame is None:
-            raise HTTPException(status_code=400, detail="Invalid image format")
-        
-        # Convert BGR to RGB for MediaPipe
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # Convert to numpy array for MediaPipe
+        image_np = np.array(image)
         
         # Process with MediaPipe
-        results = hands.process(rgb_frame)
+        results = hands.process(image_np)
         
-        # Create overlay
-        overlay = frame.copy()
+        # Create overlay using PIL
+        overlay = image.copy()
+        draw = ImageDraw.Draw(overlay)
         hand_data = {"bbox": None, "keypoints_2d": []}
         
         if results.multi_hand_landmarks:
             # Hand detected
             hand_landmarks = results.multi_hand_landmarks[0]
             
-            # Draw landmarks
-            mp_drawing.draw_landmarks(
-                overlay, hand_landmarks, mp_hands.HAND_CONNECTIONS,
-                mp_drawing.DrawingSpec(color=(0, 255, 255), thickness=3, circle_radius=5),
-                mp_drawing.DrawingSpec(color=(255, 255, 0), thickness=2)
-            )
-            
             # Extract keypoints
-            h, w, _ = frame.shape
+            h, w = image.size[1], image.size[0]  # height, width
             keypoints_2d = []
             x_coords, y_coords = [], []
             
@@ -100,6 +93,9 @@ async def process_hand(file: UploadFile = File(...)):
                 keypoints_2d.append([x, y])
                 x_coords.append(x)
                 y_coords.append(y)
+                
+                # Draw keypoint
+                draw.ellipse([x-3, y-3, x+3, y+3], fill='yellow', outline='red', width=2)
             
             # Calculate bounding box
             if x_coords and y_coords:
@@ -115,15 +111,25 @@ async def process_hand(file: UploadFile = File(...)):
                 hand_data['bbox'] = bbox
                 
                 # Draw bounding box
-                cv2.rectangle(overlay, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 3)
-                cv2.putText(overlay, "HAND DETECTED", (bbox[0], bbox[1]-10), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                draw.rectangle(bbox, outline='green', width=3)
+                draw.text((bbox[0], bbox[1]-20), "HAND DETECTED", fill='green')
+            
+            # Draw connections between keypoints
+            connections = mp_hands.HAND_CONNECTIONS
+            for connection in connections:
+                start_idx, end_idx = connection
+                if start_idx < len(keypoints_2d) and end_idx < len(keypoints_2d):
+                    start_point = keypoints_2d[start_idx]
+                    end_point = keypoints_2d[end_idx]
+                    draw.line([start_point[0], start_point[1], end_point[0], end_point[1]], 
+                             fill='blue', width=2)
             
             hand_data['keypoints_2d'] = keypoints_2d
             
             # Convert overlay to base64
-            _, buffer = cv2.imencode('.jpg', overlay)
-            overlay_base64 = base64.b64encode(buffer).decode('utf-8')
+            buffer = io.BytesIO()
+            overlay.save(buffer, format='JPEG')
+            overlay_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
             
             return {
                 "success": True,
