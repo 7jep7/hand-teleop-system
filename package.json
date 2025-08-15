@@ -1,6 +1,16 @@
 {
+  "name": "hand-teleop-system",
+  "version": "1.0.0",
+  "description": "Self-contained hand tracking system for robot teleoperation",
+  "keywords": ["hand-tracking", "teleoperation", "robotics", "mediapipe", "wilor"],
+  "license": "Apache-2.0",
   "dependencies": {
     "three-stdlib": "^2.36.0",
     "urdf-loader": "^0.12.6"
+  },
+  "scripts": {
+    "start": "./scripts/run_web_api.sh",
+    "test": "python -m pytest tests/",
+    "clean": "find . -name '*.pyc' -delete && find . -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true"
   }
 }

@@ -1,100 +1,118 @@
-# Hand Teleop - Hand-Controlled Robot Manipulation
+# 🤖 Hand Teleop System
 
-A modern, web-based system for controlling robot manipulators through hand gestures using computer vision and machine learning.
+> **Self-contained hand tracking system for robot teleoperation**
 
-## 🎯 Project Goal
+A real-time hand tracking and robot control system that enables intuitive teleoperation using computer vision and inverse kinematics.
 
-Build a complete hand-controlled robot manipulation system where you can steer your SO-101 (or other robot manipulator) by simply moving your hand in front of a camera.
+## ✨ Features
 
-## 🏆 Current Status: WiLoR Hand Tracking Demo
+- **🎯 Real-time fingertip tracking** - MediaPipe & WiLoR integration
+- **🤖 Robot kinematics** - Inverse kinematics for multiple robot arms  
+- **📊 Kalman filtering** - Smooth motion tracking and prediction
+- **🌐 Web interface** - Browser-based control with live camera feed
+- **⚡ FastAPI backend** - RESTful API for integration
+- **🎮 Multiple estimators** - MediaPipe, WiLoR, AprilTag support
 
-The first milestone is complete: **Real-time hand pose estimation using WiLoR** with web interface integration.
+## 🚀 Quick Start
 
-## 🚀 Features
+### Web Interface
+```bash
+# Start the web API server
+python main.py web
+# Open browser to http://localhost:8000
+```
 
-- **Real-time Hand Tracking**: 21-point hand pose estimation using WiLoR
-- **Web Interface**: Live camera capture and overlay visualization  
-- **REST API**: FastAPI backend for seamless integration
-- **Remix Ready**: React component ready for jonaspetersen.com
-- **Robot Support**: Kinematics and control for SO-101 and other manipulators
+### Desktop GUI
+```bash
+python main.py gui
+```
+
+### Test Hand Tracking
+```bash
+python main.py test
+```
 
 ## 📁 Project Structure
 
 ```
-hand-teleop/
-├── 📖 docs/                    # Documentation
-├── 🌐 frontend/               # Web interface components
-│   ├── components/           # Remix/React components  
-│   └── web/                 # Standalone web interface
-├── ⚙️  backend/               # API and server code
-├── 🔧 core/                  # Core modules
-│   ├── hand_pose/          # Hand pose estimation
-│   ├── robot_control/      # Robot manipulation & kinematics
-│   └── tracking/           # Tracking algorithms
-├── 🔨 scripts/              # Utility and setup scripts
-├── 🧪 tests/                # Test files
-├── 📋 examples/             # Example applications
-└── 📦 assets/               # Static assets and sample data
+hand-teleop-system/
+├── core/                      # Core system modules
+│   ├── hand_pose/            # Hand tracking estimators
+│   ├── robot_control/        # Robot kinematics & control  
+│   └── tracking/             # Motion tracking & filtering
+├── backend/                   # Web API server
+├── frontend/                  # Web interface
+├── integrations/              # External integrations (React/Remix)
+├── tests/                     # Test suite
+├── scripts/                   # Utility scripts
+├── docs/                      # Documentation
+└── examples/                  # Example applications
 ```
 
-## 🚀 Quick Start
+## �️ Installation
 
-### 1. Setup Environment
 ```bash
-# Run the setup script
-./scripts/setup.sh
+# Install with Poetry (recommended)
+poetry install
+
+# Or with pip
+pip install -e .
+
+# Install optional features
+pip install -e ".[wilor,mediapipe]"
 ```
 
-### 2. Start Web API
+## 🧪 Testing
+
 ```bash
-# Start the FastAPI backend
-./scripts/run_web_api.sh
+# Run all tests
+python main.py test
+pytest tests/
+
+# Run specific test
+pytest tests/test_mvp_fingertips.py -v
 ```
 
-### 3. Access Web Interface
-```bash
-# Open browser to
-http://localhost:8000
-```
+## 🔧 Configuration
 
-### 4. Try Desktop GUI (Optional)
-```bash
-# Run the desktop GUI example
-./scripts/run_gui.sh
-```
+### Supported Robots
+- **SO-101** - 6-DOF manipulator
+- **Koch** - Bimanual system  
+- **MOSS** - Research platform
+
+### Hand Pose Estimators
+- **MediaPipe** - Fast, lightweight (default)
+- **WiLoR** - High precision research model
+- **AprilTag** - Marker-based tracking
 
 ## 📚 Documentation
 
-- [📋 Web Integration Guide](docs/WEB_INTEGRATION.md) - Complete guide for web integration
-- [🤖 SO-101 Setup](docs/SO101_SETUP.md) - Robot-specific setup instructions
-- [📖 Main Documentation](docs/README.md) - Detailed project documentation
+- [Web Integration](docs/WEB_INTEGRATION.md) - Browser integration guide
+- [Robot Setup](docs/SO101_SETUP.md) - Hardware configuration  
+- [API Reference](docs/README.md) - Detailed API documentation
 
-## 🛠️ Development
+## � Integration
 
-### Core Modules
-- **`core/hand_pose/`**: Hand tracking implementations (WiLoR, MediaPipe, AprilTag)
-- **`core/robot_control/`**: Robot kinematics, control, and URDF support
-- **`core/tracking/`**: Kalman filters and tracking utilities
+### React/Remix Components
+```typescript
+// Available in integrations/remix/
+import HandTeleopWidget from './integrations/remix/HandTeleopWidget'
+```
 
-### Frontend Components
-- **`frontend/components/`**: Remix/React components for web integration
-- **`frontend/web/`**: Standalone web interface
-
-### Backend API
-- **`backend/web_api.py`**: FastAPI server with hand processing endpoints
-
-## 🎯 Roadmap
-
-- [x] **Milestone 1**: WiLoR Hand Tracking Demo ✅
-- [ ] **Milestone 2**: Hand-to-Robot Pose Mapping
-- [ ] **Milestone 3**: Real-time Robot Control
-- [ ] **Milestone 4**: Advanced Gestures & Commands
-- [ ] **Milestone 5**: Multi-robot Support
+### API Endpoints
+```bash
+GET  /                    # Web interface
+GET  /health              # Health check  
+POST /api/process-hand    # Hand pose estimation
+GET  /diagnostics         # Camera diagnostics
+```
 
 ## 📄 License
 
-This project is licensed under the terms specified in the LICENSE file.
+Apache 2.0 - See [LICENSE](LICENSE) for details.
 
-## 🤝 Contributing
+## 🙏 Acknowledgments
 
-This project is designed with a clean, modular structure to support future growth and collaboration.
+- MediaPipe for real-time hand tracking
+- WiLoR research team for precision hand pose estimation
+- Open source robotics community
