@@ -7,8 +7,8 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSock
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Dict, Any, List, Optional
+from pydantic import BaseModel, validator
+from typing import Dict, Any, List, Optional, Literal
 import cv2
 import numpy as np
 import base64
@@ -52,7 +52,7 @@ class RobotConfig(BaseModel):
 class HandTrackingRequest(BaseModel):
     image_data: str  # Base64 encoded image
     robot_type: Optional[str] = "so101"
-    tracking_mode: Optional[str] = "wilor"
+    tracking_mode: Optional[Literal["wilor", "mediapipe"]] = "wilor"
 
 class HandTrackingResponse(BaseModel):
     success: bool
@@ -674,21 +674,48 @@ def process_frame():
             
         hand = result[0]
         
-        # Extract hand pose data
+        # Extract hand pose data based on tracking mode
         hand_pose = {{}}
-        if 'wilor_preds' in hand and hand['wilor_preds'] is not None:
-            wilor_data = hand['wilor_preds']
-            if 'pred_keypoints_2d' in wilor_data:
-                keypoints = wilor_data['pred_keypoints_2d']
-                if hasattr(keypoints, 'cpu'):
-                    keypoints = keypoints.cpu().numpy()[0]
-                hand_pose['keypoints_2d'] = keypoints.tolist()
-            
-            if 'pred_keypoints_3d' in wilor_data:
-                keypoints_3d = wilor_data['pred_keypoints_3d']
-                if hasattr(keypoints_3d, 'cpu'):
-                    keypoints_3d = keypoints_3d.cpu().numpy()[0]
-                hand_pose['keypoints_3d'] = keypoints_3d.tolist()
+        if "{tracking_mode}" == "wilor":
+            # Extract WiLoR predictions
+            if 'wilor_preds' in hand and hand['wilor_preds'] is not None:
+                wilor_data = hand['wilor_preds']
+                if 'pred_keypoints_2d' in wilor_data:
+                    keypoints = wilor_data['pred_keypoints_2d']
+                    if hasattr(keypoints, 'cpu'):
+                        keypoints = keypoints.cpu().numpy()[0]
+                    hand_pose['keypoints_2d'] = keypoints.tolist()
+                
+                if 'pred_keypoints_3d' in wilor_data:
+                    keypoints_3d = wilor_data['pred_keypoints_3d']
+                    if hasattr(keypoints_3d, 'cpu'):
+                        keypoints_3d = keypoints_3d.cpu().numpy()[0]
+                    hand_pose['keypoints_3d'] = keypoints_3d.tolist()
+                    
+                hand_pose['tracking_method'] = 'wilor'
+        else:
+            # Extract MediaPipe predictions
+            if 'mediapipe_preds' in hand and hand['mediapipe_preds'] is not None:
+                mp_data = hand['mediapipe_preds']
+                if 'landmarks' in mp_data:
+                    landmarks = mp_data['landmarks']
+                    if landmarks:
+                        # Convert MediaPipe landmarks to our format
+                        keypoints_2d = [[lm.x, lm.y] for lm in landmarks.landmark]
+                        keypoints_3d = [[lm.x, lm.y, lm.z] for lm in landmarks.landmark]
+                        hand_pose['keypoints_2d'] = keypoints_2d
+                        hand_pose['keypoints_3d'] = keypoints_3d
+                        
+                hand_pose['tracking_method'] = 'mediapipe'
+            elif 'landmarks' in hand:
+                # Direct MediaPipe format
+                landmarks = hand['landmarks']
+                if landmarks:
+                    keypoints_2d = [[lm.x, lm.y] for lm in landmarks.landmark]
+                    keypoints_3d = [[lm.x, lm.y, lm.z] for lm in landmarks.landmark]
+                    hand_pose['keypoints_2d'] = keypoints_2d
+                    hand_pose['keypoints_3d'] = keypoints_3d
+                    hand_pose['tracking_method'] = 'mediapipe'
         
         # Calculate robot joint angles using inverse kinematics
         robot_joints = calculate_robot_joints(hand_pose, "{robot_type}")
