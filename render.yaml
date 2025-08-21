@@ -3,9 +3,11 @@ services:
     name: hand-teleop-api
     runtime: python3
     buildCommand: pip install -r requirements-deploy.txt
-    startCommand: uvicorn backend.deploy_api:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn backend.render_backend:app --host 0.0.0.0 --port $PORT
     plan: free
     autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.18
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=512
