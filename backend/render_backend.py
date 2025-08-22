@@ -23,26 +23,38 @@ import time
 from datetime import datetime
 import uvicorn
 
+# Initialize FastAPI
 app = FastAPI(
     title="Hand Teleop System API",
+    description="Real-time hand tracking and robot control system",
     version="1.0.0",
-    description="Real-time hand tracking and robot control API"
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
 # Enable CORS for web integration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:8000", 
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
         "https://jonaspetersen.com",
-        "https://www.jonaspetersen.com",
-        "http://localhost:3000",  # For local development
-        "http://localhost:5173",  # For Vite dev server
-        "*"  # For iframe integration
+        "https://www.jonaspetersen.com"
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
+
+# Mount static files for frontend
+try:
+    app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+except RuntimeError:
+    # Handle case where frontend directory doesn't exist or path is wrong
+    print("Warning: Frontend directory not found, static files not mounted")
+    pass
 
 # Pydantic models for request/response validation
 class RobotConfig(BaseModel):
@@ -400,8 +412,7 @@ async def start_camera_calibration():
 @app.get("/demo", response_class=HTMLResponse)
 async def get_demo_interface():
     """Full demo interface - exact specification"""
-    html_content = """
-<!DOCTYPE html>
+    html_content = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -734,6 +745,26 @@ async def get_demo_interface():
 </html>
     """
     return HTMLResponse(content=html_content)
+
+@app.get("/web", response_class=FileResponse)
+async def get_web_interface():
+    """Serve the full web interface"""
+    import os
+    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "web", "web_interface.html")
+    if os.path.exists(frontend_path):
+        return FileResponse(frontend_path)
+    else:
+        raise HTTPException(status_code=404, detail="Web interface not found")
+
+@app.get("/diagnostics", response_class=FileResponse) 
+async def get_camera_diagnostics():
+    """Serve camera diagnostics page"""
+    import os
+    diagnostics_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "web", "camera_diagnostics.html")
+    if os.path.exists(diagnostics_path):
+        return FileResponse(diagnostics_path)
+    else:
+        raise HTTPException(status_code=404, detail="Camera diagnostics not found")
 
 # ==================== INTERNAL PROCESSING FUNCTIONS ====================
 

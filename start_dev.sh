@@ -31,7 +31,7 @@ echo "🧪 Testing API..."
 python3 -c "
 import sys
 sys.path.insert(0, 'backend')
-from deploy_api import app
+from render_backend import app
 print('✅ API loaded successfully')
 
 # Count routes
@@ -58,4 +58,4 @@ echo "Press Ctrl+C to stop"
 echo ""
 
 # Start the server
-cd backend && python3 -m uvicorn deploy_api:app --host 0.0.0.0 --port 8000 --reload
+cd backend && python3 -m uvicorn render_backend:app --host 0.0.0.0 --port 8000 --reload

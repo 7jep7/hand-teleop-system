@@ -58,7 +58,7 @@ GET /demo
 - **Mock implementation** fallback for deployment
 
 ### Key Files
-- `backend/deploy_api.py` - Lightweight production API
+- `backend/render_backend.py` - Production API server
 - `backend/render_backend.py` - Full-featured API with WiLoR integration
 - `requirements-deploy.txt` - Deployment dependencies
 - `render.yaml` - Render.com configuration
@@ -79,7 +79,7 @@ services:
     name: hand-teleop-api
     runtime: python3
     buildCommand: pip install -r requirements-deploy.txt
-    startCommand: uvicorn backend.deploy_api:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn backend.render_backend:app --host 0.0.0.0 --port $PORT
 ```
 
 ### Dependencies Optimized

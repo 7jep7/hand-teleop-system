@@ -73,6 +73,24 @@ def start_backend():
         print("⚠️  Conda environment not found, using system Python")
         return run_command("python3 backend/render_backend.py &", "Start backend with system Python", 10)
 
+def serve_frontend():
+    """Serve the frontend for testing"""
+    print("\n🌐 Serving frontend...")
+    
+    # First ensure backend is running
+    if not check_backend_status():
+        print("Backend not running, starting it first...")
+        start_backend()
+        time.sleep(3)
+    
+    # Serve the frontend directory
+    frontend_cmd = "cd frontend && python3 -m http.server 3000"
+    print("🔄 Starting frontend server on http://localhost:3000")
+    print("🔗 Backend API available at http://localhost:8000")
+    print("📋 Access the web interface at: http://localhost:3000/web/web_interface.html")
+    
+    return run_command(frontend_cmd, "Start frontend server", timeout=5)
+
 def run_tests():
     """Run the test suite"""
     print("\n🧪 Running test suite...")
@@ -138,6 +156,8 @@ def main():
         print("  clean    - Clean up temporary files and cache")
         print("  test     - Run comprehensive test suite")
         print("  start    - Start the backend server")
+        print("  frontend - Serve frontend for testing")
+        print("  dev      - Start both backend and frontend")
         print("  check    - Validate project structure")
         print("  info     - Show project information")
         print("  all      - Run clean, check, start, and test")
@@ -151,6 +171,14 @@ def main():
         run_tests()
     elif command == "start":
         start_backend()
+    elif command == "frontend":
+        serve_frontend()
+    elif command == "dev":
+        print("🚀 Starting development environment...")
+        print("\n" + "="*50)
+        start_backend()
+        time.sleep(2)
+        serve_frontend()
     elif command == "check":
         validate_structure()
     elif command == "info":

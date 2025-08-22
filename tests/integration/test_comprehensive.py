@@ -177,7 +177,7 @@ class TestRunner:
         # Check for old backend files
         backend_files = list((PROJECT_ROOT / "backend").glob("*.py"))
         for file in backend_files:
-            if file.name not in ["render_backend.py", "deploy_api.py", "web_api.py"]:
+            if file.name not in ["render_backend.py"]:
                 potentially_obsolete.append(str(file.relative_to(PROJECT_ROOT)))
         
         # Check for cache files
