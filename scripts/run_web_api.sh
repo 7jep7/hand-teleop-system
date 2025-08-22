@@ -1,7 +1,13 @@
 #!/bin/bash
 # Professional WiLoR Web API Launcher with Resource Management
 
-echo "🔒 Starting Hand Teleop Web API with professional resource management..."
+echo "� This script is deprecated. Use the unified entry point instead:"
+echo "   python main.py                # Quick start with resource management"
+echo "   python main.py --start        # API server only"
+echo "   python main.py --dev          # Development mode"
+echo ""
+echo "⚠️  Continuing with legacy functionality for compatibility..."
+echo ""
 
 # Set resource limits to prevent system crashes
 echo "�️  Setting system resource limits..."
@@ -75,7 +81,7 @@ sys.path.insert(0, os.path.join(os.getcwd(), 'backend'))
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 try:
-    from web_api import app
+    from render_backend import app
     uvicorn.run(app, host='0.0.0.0', port=8000, log_level='info')
 except KeyboardInterrupt:
     print('\\n🛑 Server stopped by user')

@@ -1840,9 +1840,16 @@
                     const controller = new AbortController();
                     const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
                     
-                    const response = await fetch('/api/process-hand', {
+                    const response = await fetch('/api/track', {
                         method: 'POST',
-                        body: formData,
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            image_data: canvas.toDataURL('image/jpeg', 0.8),
+                            robot_type: 'so101',
+                            tracking_mode: 'wilor'
+                        }),
                         signal: controller.signal
                     });
                     

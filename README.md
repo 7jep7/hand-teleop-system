@@ -26,13 +26,28 @@ conda env create -f environment.yml
 conda activate hand-teleop
 ```
 
-### 2. Start Backend
-```bash
-# Using project manager (recommended)
-python3 manage.py start
+### 2. Start System
 
-# Or manually
-conda activate hand-teleop && python backend/render_backend.py
+**Quick start (recommended):**
+```bash
+# Single unified entry point with production defaults
+python main.py                    # Quick start with resource management
+```
+
+**Other commands:**
+```bash
+python main.py --start            # API server only
+python main.py --dev              # Development mode (backend + frontend)
+python main.py --test             # Run test suite
+python main.py --validate         # Complete project validation
+python main.py --info             # Show project information
+```
+
+**Legacy commands (deprecated):**
+```bash
+# These still work but are being phased out
+python3 manage.py start           # Use: python main.py --start
+./scripts/run_web_api.sh          # Use: python main.py
 ```
 
 ### 3. Test System
@@ -112,7 +127,7 @@ python main.py test
 pytest tests/
 
 # Run specific test
-pytest tests/test_mvp_fingertips.py -v
+python3 manage.py test
 ```
 
 ## 🔧 Configuration
@@ -145,7 +160,7 @@ import HandTeleopWidget from './integrations/remix/HandTeleopWidget'
 ```bash
 GET  /                    # Web interface
 GET  /health              # Health check  
-POST /api/process-hand    # Hand pose estimation
+POST /api/track           # Hand pose estimation
 GET  /diagnostics         # Camera diagnostics
 ```
 

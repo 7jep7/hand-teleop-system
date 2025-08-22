@@ -77,7 +77,7 @@ export default function WiLoRHandTracking() {
       const formData = new FormData();
       formData.append('file', blob, 'capture.jpg');
 
-      const response = await fetch('http://localhost:8000/api/process-hand', {
+      const response = await fetch('http://localhost:8000/api/track', {
         method: 'POST',
         body: formData,
       });

@@ -7,12 +7,15 @@ This project provides a complete web-based hand tracking solution using WiLoR th
 ### 1. Start the Web API Server
 
 ```bash
-./run_web_api.sh
+python3 manage.py start
+# OR for full resource management:
+./scripts/run_web_api.sh
 ```
 
 This starts a FastAPI server at `http://localhost:8000` with:
-- **Web Interface**: `http://localhost:8000` (standalone HTML)
-- **API Endpoint**: `http://localhost:8000/api/process-hand`
+- **Demo Interface**: `http://localhost:8000/demo` (built-in demo)
+- **Full Web Interface**: `http://localhost:8000/web` (advanced interface)
+- **API Endpoint**: `http://localhost:8000/api/track`
 - **Health Check**: `http://localhost:8000/health`
 
 ### 2. For Remix Integration
@@ -47,13 +50,14 @@ This separation ensures:
 
 ### API Endpoints
 
-#### POST `/api/process-hand`
+#### POST `/api/track`
 Upload an image and get hand tracking results.
 
 **Request:**
 ```bash
-curl -X POST http://localhost:8000/api/process-hand \
-  -F "file=@image.jpg"
+curl -X POST http://localhost:8000/api/track \
+  -H "Content-Type: application/json" \
+  -d '{"image_data": "base64_encoded_image", "robot_type": "so101", "tracking_mode": "wilor"}'
 ```
 
 **Response:**
@@ -98,7 +102,7 @@ The components use **Tailwind CSS** classes that match your existing website:
 
 ### For jonaspetersen.com deployment:
 
-1. **Update CORS settings** in `web_api.py`:
+1. **Update CORS settings** in `render_backend.py`:
    ```python
    allow_origins=["https://jonaspetersen.com", "https://www.jonaspetersen.com"]
    ```
@@ -113,18 +117,24 @@ The components use **Tailwind CSS** classes that match your existing website:
 
 4. **Server deployment**: 
    ```bash
-   uvicorn web_api:app --host 0.0.0.0 --port 8000 --workers 1
+   uvicorn render_backend:app --host 0.0.0.0 --port 8000 --workers 1
    ```
 
 ## 🛠️ Development
 
 ### Files Structure
 ```
-├── web_api.py              # FastAPI backend server
-├── web_interface.html      # Standalone web interface  
-├── remix-component.tsx     # React component for Remix
-├── run_web_api.sh         # Launcher script
-└── wilor_gui_app.py       # Original tkinter app (fallback)
+├── backend/
+│   └── render_backend.py      # FastAPI backend server
+├── frontend/
+│   └── web/
+│       ├── web_interface.html # Full web interface  
+│       └── camera_diagnostics.html # Camera diagnostics
+├── scripts/
+│   └── run_web_api.sh        # Launcher script
+├── manage.py                 # Project manager
+└── examples/
+    └── wilor_gui_app.py      # Original tkinter app (fallback)
 ```
 
 ### Environment Dependencies

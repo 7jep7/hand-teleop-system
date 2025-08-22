@@ -56,22 +56,78 @@ def check_backend_status():
     return run_command("curl -s http://localhost:8000/api/health > /dev/null", "Backend health check", 5)
 
 def start_backend():
-    """Start the backend server"""
-    print("\n🚀 Starting backend server...")
+    """Start the backend server with production-grade resource management"""
+    print("\n🚀 Starting backend server with resource management...")
     
-    # Check if conda env exists
-    conda_check = run_command("conda info --envs | grep hand-teleop", "Check conda environment", 5)
+    # Production-grade resource management
+    setup_resource_management()
     
-    if conda_check:
-        print("✅ Using conda environment")
-        return run_command(
-            "conda activate hand-teleop && python3 backend/render_backend.py &", 
-            "Start backend with conda", 
+    # Check and mount partition if needed
+    ensure_partition_mounted()
+    
+    # Use hand-teleop environment (not j11n)
+    conda_path = "/mnt/nvme0n1p8/conda-envs/hand-teleop/bin/python"
+    fallback_check = run_command("conda info --envs | grep hand-teleop", "Check conda environment", 5)
+    
+    if os.path.exists(conda_path):
+        print("✅ Using optimized conda environment with resource management")
+        cmd = f"nice -n 10 {conda_path} backend/render_backend.py"
+        return run_command(cmd, "Start backend with production settings", 10)
+    elif fallback_check:
+        print("✅ Using conda environment with basic resource management")  
+        cmd = "nice -n 10 conda run -n hand-teleop python3 backend/render_backend.py"
+        return run_command(cmd, "Start backend with conda run", 10)
+    else:
+        print("⚠️  Using system Python with basic resource management")
+        return run_command("nice -n 10 python3 backend/render_backend.py", "Start backend with system Python", 10)
+
+def setup_resource_management():
+    """Configure production-grade resource management"""
+    print("🛡️  Configuring resource management...")
+    
+    import multiprocessing
+    
+    # Get system resources
+    total_cores = multiprocessing.cpu_count()
+    use_cores = max(1, int(total_cores * 0.7))  # Use 70% of cores
+    
+    # Set environment variables for resource control
+    env_vars = {
+        'OMP_NUM_THREADS': str(use_cores),
+        'MKL_NUM_THREADS': str(use_cores),
+        'CUDA_VISIBLE_DEVICES': '0',
+        'PYTORCH_CUDA_ALLOC_CONF': 'max_split_size_mb:512'
+    }
+    
+    for key, value in env_vars.items():
+        os.environ[key] = value
+        print(f"   {key}={value}")
+    
+    # Set memory limits (requires privileged access)
+    try:
+        run_command("ulimit -v 8388608", "Set virtual memory limit (8GB)", 2)
+        run_command("ulimit -m 6291456", "Set physical memory limit (6GB)", 2) 
+    except:
+        print("   ⚠️  Memory limits require privileged access")
+    
+    print(f"   CPU cores: {use_cores}/{total_cores}")
+    print("   Process priority: Nice +10")
+
+def ensure_partition_mounted():
+    """Ensure the conda environments partition is mounted"""
+    conda_dir = "/mnt/nvme0n1p8/conda-envs"
+    
+    if not os.path.exists(conda_dir):
+        print("🔧 Mounting conda environments partition...")
+        mount_success = run_command(
+            "sudo mount /dev/nvme0n1p8 /mnt/nvme0n1p8", 
+            "Mount partition for conda environments", 
             10
         )
+        if not mount_success:
+            print("   ⚠️  Partition mounting failed - using fallback environment")
     else:
-        print("⚠️  Conda environment not found, using system Python")
-        return run_command("python3 backend/render_backend.py &", "Start backend with system Python", 10)
+        print("✅ Conda environments partition already mounted")
 
 def serve_frontend():
     """Serve the frontend for testing"""
@@ -147,6 +203,12 @@ def show_project_info():
 
 def main():
     """Main project manager interface"""
+    print("⚠️  DEPRECATION NOTICE: manage.py is being replaced by main.py")
+    print("🔄 Please use: python main.py [options]")
+    print("   python main.py --help for all options")
+    print("=" * 60)
+    print("")
+    
     print("🎯 Hand Teleop System - Project Manager")
     print("=" * 50)
     

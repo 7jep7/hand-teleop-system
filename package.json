@@ -9,7 +9,7 @@
     "urdf-loader": "^0.12.6"
   },
   "scripts": {
-    "start": "./scripts/run_web_api.sh",
+    "start": "python3 manage.py start",
     "test": "python -m pytest tests/",
     "clean": "find . -name '*.pyc' -delete && find . -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true"
   }
