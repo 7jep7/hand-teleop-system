@@ -1,52 +1,94 @@
 # 🤖 Hand Teleop System
 
-> **Self-contained hand tracking system for robot teleoperation**
+> **Real-time hand tracking and robot teleoperation system**
 
-A real-time hand tracking and robot control system that enables intuitive teleoperation using computer vision and inverse kinematics.
+A production-ready hand tracking and robot control system that enables intuitive teleoperation using computer vision, inverse kinematics, and WebSocket streaming.
 
-## ✨ Features
+## ✨ Key Features
 
-- **🎯 Real-time fingertip tracking** - MediaPipe & WiLoR integration
-- **🤖 Robot kinematics** - Inverse kinematics for multiple robot arms  
-- **📊 Kalman filtering** - Smooth motion tracking and prediction
-- **🌐 Web interface** - Browser-based control with live camera feed
-- **⚡ FastAPI backend** - RESTful API for integration
-- **🎮 Multiple estimators** - MediaPipe, WiLoR, AprilTag support
+- **🎯 Real-time hand tracking** - MediaPipe & WiLoR integration with fallback support
+- **🤖 Multi-robot support** - SO-101, SO-100, Koch arm, MOSS platform
+- **📊 Performance monitoring** - Built-in metrics and health checks  
+- **🌐 Production web API** - FastAPI with WebSocket real-time streaming
+- **⚡ Robust error handling** - Graceful fallbacks and detailed diagnostics
+- **� Live demo interface** - Browser-based control with Three.js visualization
 
 ## 🚀 Quick Start
 
-### Web Interface
+### 1. Setup Environment
 ```bash
-# Start the web API server
-python main.py web
-# Open browser to http://localhost:8000
+# Clone and setup
+git clone https://github.com/7jep7/hand-teleop-system.git
+cd hand-teleop-system
+
+# Install dependencies (conda recommended)
+conda env create -f environment.yml
+conda activate hand-teleop
 ```
 
-### Desktop GUI
+### 2. Start Backend
 ```bash
-python main.py gui
+# Using project manager (recommended)
+python3 manage.py start
+
+# Or manually
+conda activate hand-teleop && python backend/render_backend.py
 ```
 
-### Test Hand Tracking
+### 3. Test System
 ```bash
-python main.py test
+# Run comprehensive tests
+python3 manage.py test
+
+# Or run all checks
+python3 manage.py all
+```
+
+### 4. Access Demo
+Open your browser to: **http://localhost:8000/demo**
+
+## 🛠️ Project Manager
+
+Use the built-in project manager for easy development:
+
+```bash
+# Show available commands
+python3 manage.py
+
+# Clean project (remove cache, temp files)
+python3 manage.py clean
+
+# Validate project structure  
+python3 manage.py check
+
+# Start backend server
+python3 manage.py start
+
+# Run comprehensive tests
+python3 manage.py test
+
+# Run all tasks (recommended)
+python3 manage.py all
 ```
 
 ## 📁 Project Structure
 
 ```
 hand-teleop-system/
-├── core/                      # Core system modules
-│   ├── hand_pose/            # Hand tracking estimators
-│   ├── robot_control/        # Robot kinematics & control  
-│   └── tracking/             # Motion tracking & filtering
-├── backend/                   # Web API server
-├── frontend/                  # Web interface
-├── integrations/              # External integrations (React/Remix)
-├── tests/                     # Test suite
-├── scripts/                   # Utility scripts
-├── docs/                      # Documentation
-└── examples/                  # Example applications
+├── manage.py                  # 🎯 Project manager (start here!)
+├── backend/
+│   └── render_backend.py     # 🌐 Production FastAPI server
+├── core/                     # 🔧 Core system modules
+│   ├── hand_pose/           # 👋 Hand tracking (MediaPipe, WiLoR)
+│   ├── robot_control/       # 🤖 Robot kinematics & control
+│   └── tracking/            # 📊 Motion tracking & filtering
+├── tests/                   # 🧪 Test suite
+│   ├── integration/         # End-to-end API tests
+│   └── unit/               # Component unit tests
+├── frontend/               # 🎨 Web interface assets
+├── docs/                   # 📚 Documentation
+├── scripts/                # 🔧 Utility scripts
+└── examples/               # 💡 Example applications
 ```
 
 ## �️ Installation

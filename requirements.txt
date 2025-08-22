@@ -1,12 +1,23 @@
+# Hand Teleop System - Production Dependencies
+# Backend API Server
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
+websockets==11.0.3
+pydantic==2.4.2
+
+# Computer Vision & ML
 opencv-python-headless==4.8.1.78
 numpy==1.24.3
 torch==2.1.0
 torchvision==0.16.0
 mediapipe==0.10.7
-websockets==11.0.3
-pydantic==2.4.2
-python-json-logger==2.0.7
 Pillow==10.0.1
+
+# Utilities & Logging
+python-json-logger==2.0.7
+requests==2.31.0
+
+# Optional: For local development/testing
+# pynput==1.7.6  # For keyboard/mouse input (desktop GUI)
+# scipy==1.11.3  # For advanced filtering/kinematics

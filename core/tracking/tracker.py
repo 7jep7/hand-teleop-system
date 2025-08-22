@@ -16,12 +16,12 @@ import cv2
 import numpy as np
 from pynput import keyboard, mouse
 
-from hand_teleop.gripper_pose.gripper_pose import GripperPose
-from hand_teleop.gripper_pose.gripper_pose_computer import GripperPoseComputer
-from hand_teleop.gripper_pose.gripper_pose_visualizer import GripperPoseVisualizer
-from hand_teleop.hand_pose.factory import ModelName
-from hand_teleop.kinematics.kinematics import RobotKinematics
-from hand_teleop.tracking.kalman_filter import KalmanXYZ
+from core.robot_control.gripper_pose import GripperPose
+from core.robot_control.gripper_pose_computer import GripperPoseComputer
+from core.robot_control.gripper_pose_visualizer import GripperPoseVisualizer
+from core.hand_pose.factory import ModelName
+from core.robot_control.kinematics import RobotKinematics
+from core.tracking.kalman_filter import KalmanXYZ
 
 DEFAULT_CAM_T = np.array([0, -0.24, 0.6], dtype=np.float32)
 
