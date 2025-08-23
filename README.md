@@ -50,17 +50,70 @@ python3 manage.py start           # Use: python main.py --start
 ./scripts/run_web_api.sh          # Use: python main.py
 ```
 
-### 3. Test System
+### 3. Test the API
 ```bash
-# Run comprehensive tests
-python3 manage.py test
-
-# Or run all checks
-python3 manage.py all
+curl http://localhost:8000/api/health
 ```
 
-### 4. Access Demo
-Open your browser to: **http://localhost:8000/demo**
+## 📖 Documentation
+
+- **[📖 Complete Documentation](DOCS.md)** - Comprehensive technical guide
+- **[🚀 API Reference](DOCS.md#api-reference)** - All endpoints and examples
+- **[🤖 Robot Support](DOCS.md#robot-support)** - Supported robots and setup
+- **[🔧 Development Guide](DOCS.md#development)** - Contributing and extending
+
+## 🎯 Demo
+
+### Web Interface
+1. Start the system: `python main.py --dev`
+2. Open browser: `http://localhost:3000/web/web_interface.html`
+3. Allow camera access and move your hand!
+
+### API Usage
+```python
+import requests
+import base64
+
+# Track hand pose
+response = requests.post('http://localhost:8000/api/track', json={
+    'image': base64_image_data,
+    'robot_type': 'SO-101'
+})
+
+result = response.json()
+print(f"Robot joints: {result['robot_joints']}")
+```
+
+## 🏗️ Architecture
+
+```
+Frontend (Browser) ──► FastAPI Backend ──► Hand Tracking ──► Robot Control
+     │                       │                   │               │
+     │                       │                   ▼               ▼
+     │                       │            [MediaPipe/WiLoR]  [Kinematics]
+     │                       │                   │               │
+     └───────────────────────┴───────────────────┴───────────────┘
+                           WebSocket Real-time Stream
+```
+
+## 🤝 Contributing
+
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b feature-name`
+3. **Test** your changes: `python main.py --test`
+4. **Commit** and **push**: `git commit -m "Add feature" && git push`
+5. **Submit** a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [MediaPipe](https://google.github.io/mediapipe/) for hand tracking
+- [FastAPI](https://fastapi.tiangolo.com/) for the web framework
+- [Three.js](https://threejs.org/) for 3D visualization
+- [LeRobot](https://github.com/huggingface/lerobot) for robot learning inspiration
 
 ## 🛠️ Project Manager
 

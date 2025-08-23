@@ -1,12 +1,40 @@
-# Scripts Directory
+# 🔧 Scripts
 
-## Overview
-This directory contains specialized scripts for different deployment scenarios.
+> **⚠️ DEPRECATION NOTICE**: These scripts are being phased out in favor of the unified `main.py` entry point.
 
-## Scripts
+## Current Scripts
 
-### `run_web_api.sh` - Production Resource Management
-**Use when:** You need production-grade resource management and have specific conda environments set up.
+### `run_web_api.sh` (Legacy)
+- **Status**: Deprecated  
+- **Replacement**: `python main.py --start`
+- **Purpose**: Production server with resource management
+
+### `setup.sh`
+- **Status**: Active
+- **Purpose**: Initial environment setup
+- **Usage**: `./scripts/setup.sh`
+
+### `run_gui.sh`
+- **Status**: Active
+- **Purpose**: Desktop GUI launcher
+- **Usage**: `./scripts/run_gui.sh`
+
+## Migration Guide
+
+| Old Command | New Command |
+|-------------|-------------|
+| `./scripts/run_web_api.sh` | `python main.py --start` |
+| Custom resource setup | Built into `main.py` (automatic) |
+| Manual environment checks | `python main.py --info` |
+
+## Recommended Usage
+
+Use the unified entry point for all operations:
+```bash
+python main.py --help    # See all options
+python main.py           # Quick start
+python main.py --dev     # Development mode
+```
 
 **Features:**
 - Memory limits (8GB virtual, 6GB physical)

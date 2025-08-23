@@ -16,6 +16,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent
 os.chdir(PROJECT_ROOT)
 
+# Get project root
+PROJECT_ROOT = Path(__file__).parent
+os.chdir(PROJECT_ROOT)
+
 def run_command(cmd, description="", timeout=30):
     """Run a command and return success status"""
     print(f"🔄 {description}")
