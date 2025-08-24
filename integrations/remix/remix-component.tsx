@@ -1,18 +1,28 @@
 // WiLoR Hand Tracking Component for Remix + Tailwind
 // Drop this into your Remix app/components/ directory
 
-import { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 
 interface HandTrackingResult {
   success: boolean;
   message: string;
   hand_detected: boolean;
   overlay_image?: string;
+  processing_time_ms?: number;
   hand_data?: {
     bbox?: number[];
     keypoints_2d?: number[][];
+    keypoints_3d?: number[][];
   };
   keypoint_count?: number;
+  robot_angles?: {
+    shoulder_pan?: number;
+    shoulder_lift?: number;
+    elbow?: number;
+    wrist_1?: number;
+    wrist_2?: number;
+    wrist_3?: number;
+  };
 }
 
 export default function WiLoRHandTracking() {
@@ -68,18 +78,26 @@ export default function WiLoRHandTracking() {
       canvas.height = videoRef.current.videoHeight;
       context.drawImage(videoRef.current, 0, 0);
 
-      // Convert to blob
-      const blob = await new Promise<Blob>((resolve) => {
-        canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.8);
-      });
+      // Convert to base64
+      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
 
-      // Send to API
-      const formData = new FormData();
-      formData.append('file', blob, 'capture.jpg');
-
-      const response = await fetch('http://localhost:8000/api/track', {
+      // Send to API with JSON payload (matches current backend)
+      // Auto-detect environment: localhost = dev, otherwise = production
+      const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const apiEndpoint = isLocalDev
+        ? 'http://localhost:8000/api/track'
+        : 'https://hand-teleop-api.onrender.com/api/track';
+        
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          image_data: imageDataUrl,
+          robot_type: 'so101',
+          tracking_mode: 'wilor'
+        }),
       });
 
       const data: HandTrackingResult = await response.json();
@@ -99,7 +117,7 @@ export default function WiLoRHandTracking() {
   }, [isProcessing]);
 
   // Cleanup on unmount
-  React.useEffect(() => {
+  useEffect(() => {
     return () => {
       stopCamera();
     };
@@ -217,9 +235,13 @@ export default function WiLoRHandTracking() {
                     <h4 className="font-semibold text-gray-800 mb-2">Detection Results:</h4>
                     <div className="text-sm text-gray-600 space-y-1">
                       <div>✅ Hand detected successfully</div>
-                      <div>📍 Keypoints found: {result.keypoint_count}</div>
+                      <div>📍 Keypoints found: {result.keypoint_count || 'N/A'}</div>
                       <div>📦 Bounding box: {result.hand_data?.bbox ? 'Yes' : 'No'}</div>
+                      <div>⏱️ Processing time: {result.processing_time_ms ? `${result.processing_time_ms}ms` : 'N/A'}</div>
                       <div>🎯 Processing: Complete</div>
+                      {result.robot_angles && (
+                        <div>🤖 Robot angles: Generated</div>
+                      )}
                     </div>
                   </div>
                 </>
