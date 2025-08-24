@@ -169,14 +169,7 @@ jobs:
         if [ -f "frontend/web/web_interface.html" ]; then
           echo "✅ Frontend assets found"
           # Basic HTML validation
-          python -c "
-          with open('frontend/web/web_interface.html') as f:
-              content = f.read()
-              if '<html' in content and '</html>' in content:
-                  print('✅ HTML structure looks valid')
-              else:
-                  print('⚠️ HTML structure might be invalid')
-          "
+          python -c "with open('frontend/web/web_interface.html') as f: content = f.read(); print('✅ HTML structure looks valid' if '<html' in content and '</html>' in content else '⚠️ HTML structure might be invalid')"
         fi
 
     - name: 📋 Deployment readiness check
