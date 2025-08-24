@@ -62,11 +62,27 @@ jobs:
         "
 
     - name: 📡 Trigger Render deployment
+      env:
+        RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
       run: |
-        echo "🚀 Deployment will be triggered automatically by Render"
-        echo "   Render detects commits to main branch and deploys automatically"
-        echo "   Check your Render dashboard for deployment status"
-        echo "   URL: https://hand-teleop-api.onrender.com"
+        echo "🚀 Triggering Render deployment via Deploy Hook..."
+        echo "Commit: $(git rev-parse --short HEAD)"
+        
+        # Use Render Deploy Hook if available
+        if [ -n "$RENDER_DEPLOY_HOOK" ]; then
+          echo "📡 Calling Render Deploy Hook..."
+          curl -X POST "$RENDER_DEPLOY_HOOK" \
+            -H "Content-Type: application/json" \
+            -d '{"ref": "main", "commit": "'$(git rev-parse HEAD)'"}' \
+            || echo "⚠️ Deploy hook call failed, but continuing..."
+        else
+          echo "⚠️ RENDER_DEPLOY_HOOK secret not set"
+          echo "💡 Please add your Render deploy hook URL as a GitHub secret"
+          echo "   Go to: GitHub repo → Settings → Secrets → Actions"
+          echo "   Add secret: RENDER_DEPLOY_HOOK = your-render-deploy-hook-url"
+        fi
+        
+        echo "🔍 Auto-deploy should also trigger if webhook is working"
 
     - name: ⏱️ Wait for deployment (optional)
       run: |

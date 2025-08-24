@@ -27,7 +27,7 @@ import uvicorn
 app = FastAPI(
     title="Hand Teleop System API",
     description="Real-time hand tracking and robot control system",
-    version="1.0.0",
+    version="1.0.1",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -199,6 +199,17 @@ async def health_check():
             "mediapipe": "0.10.7"
         }
     )
+
+@app.get("/api/deployment-info")
+async def deployment_info():
+    """Deployment tracking endpoint"""
+    return {
+        "git_commit": get_git_commit(),
+        "version": "1.0.1",
+        "deployed_at": datetime.now().isoformat(),
+        "render_deployment": "force-deploy-test",
+        "environment": os.environ.get("RENDER", "local")
+    }
 
 @app.get("/api/robots")
 async def list_robot_types():
