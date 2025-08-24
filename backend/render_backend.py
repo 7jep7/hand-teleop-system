@@ -191,7 +191,6 @@ async def list_robot_types():
 @app.post("/api/config/robot")
 async def configure_robot(config: RobotConfig):
     """Configure robot type and settings - exact specification"""
-    global current_robot_config
     
     # Validate robot type
     valid_types = [robot["id"] for robot in ROBOT_TYPES]
@@ -215,7 +214,6 @@ async def configure_robot(config: RobotConfig):
 @app.post("/api/track", response_model=HandTrackingResponse)
 async def process_hand_tracking(request: HandTrackingRequest):
     """Main hand tracking endpoint - exact specification"""
-    global performance_stats
     start_time = time.time()
     
     performance_stats["total_requests"] += 1
