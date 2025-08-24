@@ -56,6 +56,16 @@ curl http://localhost:8000/api/health
 2. Open browser: `http://localhost:3000/web/web_interface.html`
 3. Allow camera access and move your hand!
 
+### React/Remix Integration
+```bash
+# Copy the ready-to-use React component
+cp integrations/remix/remix-component.tsx app/components/HandTracking.tsx
+
+# Use in your Remix app
+import HandTracking from "~/components/HandTracking";
+export default function Demo() { return <HandTracking />; }
+```
+
 ### API Usage
 ```python
 import requests
