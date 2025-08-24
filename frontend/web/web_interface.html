@@ -864,6 +864,14 @@
             }
             
             animate() {
+                // Throttle animation to prevent overload
+                const now = performance.now();
+                if (this.lastRender && now - this.lastRender < 16) { // Cap at ~60 FPS
+                    requestAnimationFrame(() => this.animate());
+                    return;
+                }
+                this.lastRender = now;
+                
                 requestAnimationFrame(() => this.animate());
                 
                 // Update controls
@@ -871,7 +879,7 @@
                     this.controls.update();
                 }
                 
-                // Render
+                // Render with basic frustum culling
                 this.renderer.render(this.scene, this.camera);
             }
             
@@ -1355,9 +1363,16 @@
                     
                     this.hands.onResults((results) => this.onResults(results));
                     
-                    // Initialize camera
+                    // Initialize camera with throttled processing
                     this.camera = new Camera(this.videoElement, {
                         onFrame: async () => {
+                            // Throttle MediaPipe processing to prevent overload
+                            const now = performance.now();
+                            if (this.lastMediaPipeCall && now - this.lastMediaPipeCall < 100) { // Max 10 FPS for MediaPipe
+                                return;
+                            }
+                            this.lastMediaPipeCall = now;
+                            
                             if (this.isTracking && this.hands) {
                                 await this.hands.send({ image: this.videoElement });
                             }
@@ -1652,9 +1667,19 @@
             onResults(results) {
                 if (!this.isTracking) return;
                 
-                // Update canvas size
-                this.outputCanvas.width = this.videoElement.videoWidth;
-                this.outputCanvas.height = this.videoElement.videoHeight;
+                // Throttle UI updates to prevent excessive DOM manipulation
+                const now = performance.now();
+                if (this.lastUIUpdate && now - this.lastUIUpdate < 50) { // Max 20 FPS for UI updates
+                    return;
+                }
+                this.lastUIUpdate = now;
+                
+                // Update canvas size only when needed
+                if (this.outputCanvas.width !== this.videoElement.videoWidth ||
+                    this.outputCanvas.height !== this.videoElement.videoHeight) {
+                    this.outputCanvas.width = this.videoElement.videoWidth;
+                    this.outputCanvas.height = this.videoElement.videoHeight;
+                }
                 
                 // Clear previous drawings
                 this.ctx.clearRect(0, 0, this.outputCanvas.width, this.outputCanvas.height);
@@ -1681,7 +1706,7 @@
                     // Draw fingertips
                     this.drawFingertips();
                     
-                    // Update displays
+                    // Update displays (throttled)
                     this.updateCoordinateDisplays();
                     this.updateRobotMapping();
                     
@@ -1815,8 +1840,15 @@
             }
             
             async captureAndProcess() {
-                // Keep the original WiLoR functionality
+                // Keep the original WiLoR functionality with reduced frequency
                 if (!this.isTracking) return;
+                
+                // Throttle API calls to prevent overload
+                const now = performance.now();
+                if (this.lastAPICall && now - this.lastAPICall < 500) { // Max 2 calls per second
+                    return;
+                }
+                this.lastAPICall = now;
                 
                 this.updateStatus('Processing with WiLoR...', 'orange');
                 
@@ -1829,8 +1861,8 @@
                     canvas.height = this.videoElement.videoHeight;
                     context.drawImage(this.videoElement, 0, 0);
                     
-                    // Convert to blob
-                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+                    // Convert to blob with reduced quality for faster processing
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.6));
                     
                     // Create form data
                     const formData = new FormData();
@@ -1838,7 +1870,7 @@
                     
                     // Send to API with timeout for faster feedback
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+                    const timeoutId = setTimeout(() => controller.abort(), 1500); // Reduced timeout
                     
                     const response = await fetch('/api/track', {
                         method: 'POST',
@@ -1846,7 +1878,7 @@
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            image_data: canvas.toDataURL('image/jpeg', 0.8),
+                            image_data: canvas.toDataURL('image/jpeg', 0.6), // Reduced quality
                             robot_type: 'so101',
                             tracking_mode: 'wilor'
                         }),

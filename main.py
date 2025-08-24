@@ -48,14 +48,14 @@ def setup_resource_management():
     
     # Get system resources
     total_cores = multiprocessing.cpu_count()
-    use_cores = max(1, int(total_cores * 0.7))  # Use 70% of cores
+    use_cores = max(1, int(total_cores * 0.5))  # Reduced from 70% to 50% to prevent Chrome freeze
     
     # Set environment variables for resource control
     env_vars = {
         'OMP_NUM_THREADS': str(use_cores),
         'MKL_NUM_THREADS': str(use_cores),
         'CUDA_VISIBLE_DEVICES': '0',
-        'PYTORCH_CUDA_ALLOC_CONF': 'max_split_size_mb:512'
+        'PYTORCH_CUDA_ALLOC_CONF': 'max_split_size_mb:256'  # Reduced from 512MB to 256MB
     }
     
     for key, value in env_vars.items():
@@ -64,8 +64,8 @@ def setup_resource_management():
     
     # Set memory limits (requires privileged access)
     try:
-        run_command("ulimit -v 8388608", "Set virtual memory limit (8GB)", 2)
-        run_command("ulimit -m 6291456", "Set physical memory limit (6GB)", 2) 
+        run_command("ulimit -v 4194304", "Set virtual memory limit (4GB)", 2)  # Reduced from 8GB
+        run_command("ulimit -m 3145728", "Set physical memory limit (3GB)", 2)  # Reduced from 6GB
     except:
         print("   ⚠️  Memory limits require privileged access")
     
