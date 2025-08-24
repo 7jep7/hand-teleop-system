@@ -80,6 +80,7 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: str
     version: str
+    git_commit: str
     dependencies: Dict[str, str]
 
 # Global state management
@@ -103,6 +104,25 @@ performance_stats = {
 
 # Application start time for uptime calculation
 app_start_time = time.time()
+
+def get_git_commit():
+    """Get current git commit hash"""
+    try:
+        # Try to get commit hash from git
+        result = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], 
+                              capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except:
+        pass
+    
+    # Fallback: try to read from environment variable (Render sets this)
+    commit = os.environ.get('RENDER_GIT_COMMIT', '')
+    if commit:
+        return commit[:7]  # Short hash
+    
+    # Final fallback
+    return "unknown"
 
 # Available robot types
 ROBOT_TYPES = [
@@ -169,7 +189,8 @@ async def health_check():
     return HealthResponse(
         status="healthy",
         timestamp=datetime.now().isoformat(),
-        version="1.0.0",
+        version="1.0.1",
+        git_commit=get_git_commit(),
         dependencies={
             "opencv": "4.8.1.78",
             "numpy": "1.24.3",
