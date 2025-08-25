@@ -21,6 +21,7 @@ import sys
 import asyncio
 import time
 from datetime import datetime
+from pathlib import Path
 import uvicorn
 
 # Initialize FastAPI
@@ -181,6 +182,119 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# SO-101 Robot Simulation
+try:
+    from core.robot_control.so101_simulation import get_simulation
+    so101_sim = get_simulation()
+    so101_available = True
+    print("✅ SO-101 simulation initialized")
+except Exception as e:
+    print(f"⚠️  SO-101 simulation not available: {e}")
+    so101_available = False
+    so101_sim = None
+
+# ==================== SO-101 ROBOT API ENDPOINTS ====================
+
+@app.get("/api/robot/so101/info")
+async def get_so101_info():
+    """Get SO-101 robot information"""
+    if not so101_available:
+        raise HTTPException(status_code=503, detail="SO-101 simulation not available")
+    
+    return {
+        "success": True,
+        "robot_info": so101_sim.get_robot_info(),
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/api/robot/so101/state") 
+async def get_so101_state():
+    """Get current SO-101 joint state"""
+    if not so101_available:
+        raise HTTPException(status_code=503, detail="SO-101 simulation not available")
+    
+    return {
+        "success": True,
+        "joint_state": so101_sim.get_joint_state(),
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.post("/api/robot/so101/joints")
+async def set_so101_joints(request: Dict[str, Any]):
+    """Set SO-101 joint positions"""
+    if not so101_available:
+        raise HTTPException(status_code=503, detail="SO-101 simulation not available")
+    
+    try:
+        positions = request.get("positions", [])
+        smooth = request.get("smooth", True)
+        
+        if not positions or len(positions) != 6:
+            raise HTTPException(status_code=400, detail="Must provide exactly 6 joint positions")
+        
+        success = so101_sim.set_joint_positions(positions, smooth)
+        
+        if not success:
+            raise HTTPException(status_code=400, detail="Invalid joint positions")
+        
+        return {
+            "success": True,
+            "message": "Joint positions set successfully",
+            "joint_state": so101_sim.get_joint_state(),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error setting joint positions: {str(e)}")
+
+# Static file serving for robot assets
+@app.get("/api/assets/robot/so101/{file_path:path}")
+async def serve_so101_assets(file_path: str):
+    """Serve SO-101 robot assets (URDF, STL files)"""
+    try:
+        # Security: only allow specific file types
+        allowed_extensions = {'.urdf', '.stl', '.dae', '.obj', '.gltf', '.glb'}
+        file_ext = Path(file_path).suffix.lower()
+        
+        if file_ext not in allowed_extensions:
+            raise HTTPException(status_code=400, detail="File type not allowed")
+        
+        # Construct full path
+        assets_dir = Path(__file__).parent.parent / "assets" / "meshes" / "so101"
+        full_path = assets_dir / file_path
+        
+        # Security: ensure path is within assets directory
+        try:
+            full_path.resolve().relative_to(assets_dir.resolve())
+        except ValueError:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        if not full_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Determine media type
+        media_type_map = {
+            '.urdf': 'application/xml',
+            '.stl': 'application/octet-stream', 
+            '.dae': 'model/vnd.collada+xml',
+            '.obj': 'text/plain',
+            '.gltf': 'model/gltf+json',
+            '.glb': 'model/gltf-binary'
+        }
+        
+        media_type = media_type_map.get(file_ext, 'application/octet-stream')
+        
+        return FileResponse(
+            path=str(full_path),
+            media_type=media_type,
+            filename=full_path.name
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error serving file: {str(e)}")
+
 # ==================== EXACT REQUIRED ENDPOINTS ====================
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -320,6 +434,142 @@ async def process_hand_tracking(request: HandTrackingRequest):
             processing_time_ms=processing_time,
             message=f"Processing error: {str(e)}"
         )
+
+@app.websocket("/api/robot/so101/simulation")
+async def websocket_so101_simulation(websocket: WebSocket):
+    """Real-time SO-101 robot simulation WebSocket"""
+    if not so101_available:
+        await websocket.close(code=1003, reason="SO-101 simulation not available")
+        return
+    
+    await manager.connect(websocket)
+    
+    # Start motion update loop
+    motion_task = None
+    
+    try:
+        # Start background motion update task
+        async def motion_update_loop():
+            while True:
+                try:
+                    so101_sim.update_motion()
+                    
+                    # Broadcast current state to all connected clients
+                    state_message = {
+                        "type": "robot_state",
+                        "data": so101_sim.get_joint_state(),
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    
+                    await manager.broadcast(json.dumps(state_message))
+                    
+                    # 60fps update rate
+                    await asyncio.sleep(1.0 / 60.0)
+                    
+                except Exception as e:
+                    print(f"Motion update error: {e}")
+                    await asyncio.sleep(0.1)
+        
+        motion_task = asyncio.create_task(motion_update_loop())
+        
+        # Handle incoming messages
+        while True:
+            data = await websocket.receive_text()
+            
+            try:
+                message = json.loads(data)
+                message_type = message.get("type")
+                
+                if message_type == "set_joints":
+                    # Set joint positions
+                    positions = message.get("positions", [])
+                    smooth = message.get("smooth", True)
+                    
+                    if len(positions) == 6:
+                        success = so101_sim.set_joint_positions(positions, smooth)
+                        response = {
+                            "type": "joint_response",
+                            "success": success,
+                            "message": "Joints updated" if success else "Invalid joint positions",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    else:
+                        response = {
+                            "type": "joint_response", 
+                            "success": False,
+                            "message": "Must provide exactly 6 joint positions",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    
+                    await websocket.send_text(json.dumps(response))
+                
+                elif message_type == "hand_pose":
+                    # Convert hand pose to joint angles
+                    hand_landmarks = message.get("hand_landmarks", [])
+                    
+                    joint_angles = so101_sim.hand_pose_to_joint_angles(hand_landmarks)
+                    
+                    if joint_angles:
+                        # Apply with smooth motion
+                        so101_sim.set_joint_positions(joint_angles, smooth=True)
+                        
+                        response = {
+                            "type": "hand_pose_response",
+                            "success": True,
+                            "joint_angles": joint_angles,
+                            "message": "Hand pose converted and applied",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    else:
+                        response = {
+                            "type": "hand_pose_response",
+                            "success": False,
+                            "message": "Failed to convert hand pose",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    
+                    await websocket.send_text(json.dumps(response))
+                
+                elif message_type == "get_info":
+                    # Send robot info
+                    response = {
+                        "type": "robot_info",
+                        "data": so101_sim.get_robot_info(),
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    
+                    await websocket.send_text(json.dumps(response))
+                
+                elif message_type == "ping":
+                    # Health check
+                    response = {
+                        "type": "pong",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    
+                    await websocket.send_text(json.dumps(response))
+                
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "Invalid JSON format"
+                }))
+            except Exception as e:
+                await websocket.send_text(json.dumps({
+                    "type": "error", 
+                    "message": f"Processing error: {str(e)}"
+                }))
+                
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    finally:
+        # Clean up motion task
+        if motion_task and not motion_task.done():
+            motion_task.cancel()
+            try:
+                await motion_task
+            except asyncio.CancelledError:
+                pass
 
 @app.websocket("/api/tracking/live")
 async def websocket_live_tracking(websocket: WebSocket):
@@ -778,13 +1028,23 @@ async def get_demo_interface():
 
 @app.get("/web", response_class=FileResponse)
 async def get_web_interface():
-    """Serve the full web interface"""
+    """Serve the SO-101 simulation interface"""
     import os
-    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "web", "web_interface.html")
+    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "web", "so101_simulation.html")
     if os.path.exists(frontend_path):
         return FileResponse(frontend_path)
     else:
-        raise HTTPException(status_code=404, detail="Web interface not found")
+        raise HTTPException(status_code=404, detail="SO-101 simulation interface not found")
+
+@app.get("/stl-test", response_class=FileResponse)
+async def get_stl_test():
+    """Serve the STL test page for debugging mesh loading"""
+    import os
+    test_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "web", "stl_test_v2.html")
+    if os.path.exists(test_path):
+        return FileResponse(test_path)
+    else:
+        raise HTTPException(status_code=404, detail="STL test page not found")
 
 @app.get("/diagnostics", response_class=FileResponse) 
 async def get_camera_diagnostics():

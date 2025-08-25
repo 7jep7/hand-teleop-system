@@ -1,33 +1,180 @@
 <?xml version="1.0" ?>
-<robot name="so101_minimal">
-    <link name="base_link"/>
-    <link name="shoulder_link"/>
-    <link name="humerus_link"/>
-    <link name="forearm_link"/>
-    <link name="wrist_link"/>
-    <link name="gripper_link"/>
+<robot name="so101_complete">
+    <!-- Materials -->
+    <material name="3d_printed">
+        <color rgba="1.0 0.82 0.12 1.0"/>
+    </material>
+    <material name="motor">
+        <color rgba="0.1 0.1 0.1 1.0"/>
+    </material>
+
+    <link name="base_link">
+        <inertial>
+            <origin xyz="0 0 0.02" rpy="0 0 0"/>
+            <mass value="0.5"/>
+            <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.1 0.1 0.04"/>
+            </geometry>
+            <material name="3d_printed"/>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.1 0.1 0.04"/>
+            </geometry>
+        </collision>
+    </link>
+    
+    <link name="shoulder_link">
+        <inertial>
+            <origin xyz="0 0 0.036" rpy="0 0 0"/>
+            <mass value="0.3"/>
+            <inertia ixx="0.0005" ixy="0" ixz="0" iyy="0.0005" iyz="0" izz="0.0005"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0.036" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.06 0.06 0.072"/>
+            </geometry>
+            <material name="3d_printed"/>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0.036" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.06 0.06 0.072"/>
+            </geometry>
+        </collision>
+    </link>
+    
+    <link name="humerus_link">
+        <inertial>
+            <origin xyz="0.056 0 -0.014" rpy="0 0 0"/>
+            <mass value="0.4"/>
+            <inertia ixx="0.0008" ixy="0" ixz="0" iyy="0.0008" iyz="0" izz="0.0008"/>
+        </inertial>
+        <visual>
+            <origin xyz="0.056 0 -0.014" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.112 0.05 0.05"/>
+            </geometry>
+            <material name="3d_printed"/>
+        </visual>
+        <collision>
+            <origin xyz="0.056 0 -0.014" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.112 0.05 0.05"/>
+            </geometry>
+        </collision>
+    </link>
+    
+    <link name="forearm_link">
+        <inertial>
+            <origin xyz="0.055 0 0" rpy="0 0 0"/>
+            <mass value="0.3"/>
+            <inertia ixx="0.0006" ixy="0" ixz="0" iyy="0.0006" iyz="0" izz="0.0006"/>
+        </inertial>
+        <visual>
+            <origin xyz="0.055 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.11 0.045 0.045"/>
+            </geometry>
+            <material name="3d_printed"/>
+        </visual>
+        <collision>
+            <origin xyz="0.055 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.11 0.045 0.045"/>
+            </geometry>
+        </collision>
+    </link>
+    
+    <link name="wrist_link">
+        <inertial>
+            <origin xyz="0 0 0.035" rpy="0 0 0"/>
+            <mass value="0.2"/>
+            <inertia ixx="0.0003" ixy="0" ixz="0" iyy="0.0003" iyz="0" izz="0.0003"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0.035" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.04 0.04 0.07"/>
+            </geometry>
+            <material name="3d_printed"/>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0.035" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.04 0.04 0.07"/>
+            </geometry>
+        </collision>
+    </link>
+    
+    <link name="gripper_link">
+        <inertial>
+            <origin xyz="0 0 0.025" rpy="0 0 0"/>
+            <mass value="0.15"/>
+            <inertia ixx="0.0002" ixy="0" ixz="0" iyy="0.0002" iyz="0" izz="0.0002"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0.025" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.035 0.035 0.05"/>
+            </geometry>
+            <material name="3d_printed"/>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0.025" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.035 0.035 0.05"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <!-- Joints -->
     <joint name="shoulder_joint" type="revolute">
         <parent link="base_link"/>
         <child link="shoulder_link"/>
         <origin xyz="0 0 0.02" rpy="0 0 0"/>
-        <axis xyz="0 0 -1"/>
-        <limit lower="-3.1416" upper="3.1416" effort="1" velocity="1"/>
+        <axis xyz="0 0 1"/>
+        <limit lower="-3.1416" upper="3.1416" effort="10" velocity="2"/>
     </joint>
+    
     <joint name="humerus_joint" type="revolute">
         <parent link="shoulder_link"/>
         <child link="humerus_link"/>
         <origin xyz="0.031 0 0.072" rpy="0 0 0"/>
-        <axis xyz="0 -1 0"/>
-        <limit lower="-3.1416" upper="3.1416" effort="1" velocity="1"/>
+        <axis xyz="0 1 0"/>
+        <limit lower="-1.5708" upper="1.5708" effort="10" velocity="2"/>
     </joint>
+    
     <joint name="forearm_joint" type="revolute">
         <parent link="humerus_link"/>
         <child link="forearm_link"/>
         <origin xyz="0.112 0 -0.028" rpy="0 0 0"/>
         <axis xyz="0 1 0"/>
-        <limit lower="-3.1416" upper="3.1416" effort="1" velocity="1"/>
+        <limit lower="-2.0944" upper="2.0944" effort="10" velocity="2"/>
     </joint>
+    
     <joint name="wrist_joint" type="revolute">
+        <parent link="forearm_link"/>
+        <child link="wrist_link"/>
+        <origin xyz="0.11 0 0" rpy="0 0 0"/>
+        <axis xyz="0 1 0"/>
+        <limit lower="-1.5708" upper="1.5708" effort="5" velocity="2"/>
+    </joint>
+    
+    <joint name="roll_joint" type="revolute">
+        <parent link="wrist_link"/>
+        <child link="gripper_link"/>
+        <origin xyz="0 0 0.07" rpy="0 0 0"/>
+        <axis xyz="0 0 1"/>
+        <limit lower="-3.1416" upper="3.1416" effort="5" velocity="2"/>
+    </joint>
+</robot>
         <parent link="forearm_link"/>
         <child link="wrist_link"/>
         <origin xyz="0.135 0 0.006" rpy="0 0 0"/>

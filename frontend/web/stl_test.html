@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STL Test - Single Part Visualization</title>
+    <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            font-family: Arial, sans-serif; 
+            background: #1a1a1a; 
+            color: white; 
+        }
+        #canvas-container { 
+            width: 100vw; 
+            height: 80vh; 
+            background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 100%);
+        }
+        #controls {
+            padding: 20px;
+            background: #2a2a2a;
+            text-align: center;
+        }
+        button {
+            margin: 0 10px;
+            padding: 10px 20px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        #status {
+            margin: 10px 0;
+            padding: 10px;
+            background: #374151;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="canvas"></canvas>
+    </div>
+    
+    <div id="controls">
+        <h2>STL Single Part Test</h2>
+        <div id="status">Ready to load STL...</div>
+        
+        <button onclick="loadSTL('Base_SO101.stl')">Load Base</button>
+        <button onclick="loadSTL('Upper_arm_SO101.stl')">Load Upper Arm</button>
+        <button onclick="loadSTL('sts3215_03a_v1.stl')">Load Motor</button>
+        <button onclick="loadSTL('Moving_Jaw_SO101.stl')">Load Gripper</button>
+        <button onclick="clearScene()">Clear</button>
+    </div>
+
+    <script>
+        let scene, camera, renderer, currentMesh;
+        
+        function init() {
+            const canvas = document.getElementById('canvas');
+            const container = document.getElementById('canvas-container');
+            
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1e293b);
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(
+                75, 
+                container.clientWidth / container.clientHeight, 
+                0.01, 
+                1000
+            );
+            camera.position.set(0.2, 0.2, 0.2);
+            camera.lookAt(0, 0, 0);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+            
+            // Simple camera controls
+            setupControls();
+            
+            // Start render loop
+            animate();
+            
+            updateStatus("✅ Scene initialized. Click a button to load an STL file.");
+        }
+        
+        function setupControls() {
+            let isMouseDown = false;
+            let mouseX = 0, mouseY = 0;
+            let cameraRadius = 0.4;
+            let cameraTheta = Math.PI / 4;
+            let cameraPhi = Math.PI / 4;
+            
+            const canvas = document.getElementById('canvas');
+            
+            canvas.addEventListener('mousedown', (e) => {
+                isMouseDown = true;
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+            
+            canvas.addEventListener('mousemove', (e) => {
+                if (isMouseDown) {
+                    const deltaX = e.clientX - mouseX;
+                    const deltaY = e.clientY - mouseY;
+                    
+                    cameraTheta += deltaX * 0.01;
+                    cameraPhi = Math.max(0.1, Math.min(Math.PI - 0.1, cameraPhi + deltaY * 0.01));
+                    
+                    updateCameraPosition();
+                    
+                    mouseX = e.clientX;
+                    mouseY = e.clientY;
+                }
+            });
+            
+            canvas.addEventListener('mouseup', () => {
+                isMouseDown = false;
+            });
+            
+            canvas.addEventListener('wheel', (e) => {
+                cameraRadius = Math.max(0.1, Math.min(2, cameraRadius + e.deltaY * 0.001));
+                updateCameraPosition();
+                e.preventDefault();
+            });
+            
+            function updateCameraPosition() {
+                camera.position.x = cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta);
+                camera.position.y = cameraRadius * Math.cos(cameraPhi);
+                camera.position.z = cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta);
+                camera.lookAt(0, 0, 0);
+            }
+            
+            updateCameraPosition();
+        }
+        
+        function loadSTL(filename) {
+            updateStatus(`🔄 Loading ${filename}...`);
+            
+            // Clear previous mesh
+            if (currentMesh) {
+                scene.remove(currentMesh);
+                currentMesh = null;
+            }
+            
+            // Load STL using Three.js STLLoader
+            const loader = new THREE.STLLoader();
+            const url = `/api/assets/robot/so101/${filename}`;
+            
+            loader.load(
+                url,
+                function (geometry) {
+                    console.log('STL loaded successfully:', geometry);
+                    
+                    // Create material
+                    const material = new THREE.MeshLambertMaterial({ 
+                        color: filename.includes('sts3215') ? 0x202020 : 0xFFD700,
+                        side: THREE.DoubleSide
+                    });
+                    
+                    // Create mesh
+                    currentMesh = new THREE.Mesh(geometry, material);
+                    currentMesh.castShadow = true;
+                    currentMesh.receiveShadow = true;
+                    
+                    // Center the geometry
+                    geometry.computeBoundingBox();
+                    const box = geometry.boundingBox;
+                    const center = box.getCenter(new THREE.Vector3());
+                    geometry.translate(-center.x, -center.y, -center.z);
+                    
+                    // Scale if needed
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    if (maxDim > 0.5) {
+                        const scale = 0.5 / maxDim;
+                        currentMesh.scale.setScalar(scale);
+                    }
+                    
+                    scene.add(currentMesh);
+                    
+                    updateStatus(`✅ ${filename} loaded successfully! Vertices: ${geometry.attributes.position.count}`);
+                },
+                function (progress) {
+                    const percent = (progress.loaded / progress.total * 100) || 0;
+                    updateStatus(`🔄 Loading ${filename}... ${percent.toFixed(1)}%`);
+                },
+                function (error) {
+                    console.error('Error loading STL:', error);
+                    updateStatus(`❌ Failed to load ${filename}: ${error.message || error}`);
+                }
+            );
+        }
+        
+        function clearScene() {
+            if (currentMesh) {
+                scene.remove(currentMesh);
+                currentMesh = null;
+                updateStatus("Scene cleared.");
+            }
+        }
+        
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+            console.log(message);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+        
+        // Load STLLoader
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/STLLoader.js';
+        script.onload = () => {
+            console.log('STLLoader loaded from JSDelivr');
+            init();
+        };
+        script.onerror = () => {
+            // Try alternative CDN
+            const script2 = document.createElement('script');
+            script2.src = 'https://threejs.org/examples/js/loaders/STLLoader.js';
+            script2.onload = () => {
+                console.log('STLLoader loaded from Three.js official');
+                init();
+            };
+            script2.onerror = () => {
+                // Last fallback - try to load from unpkg with different version
+                const script3 = document.createElement('script');
+                script3.src = 'https://unpkg.com/three@0.150.0/examples/js/loaders/STLLoader.js';
+                script3.onload = () => {
+                    console.log('STLLoader loaded from unpkg v0.150');
+                    init();
+                };
+                script3.onerror = () => {
+                    updateStatus("❌ Failed to load STLLoader from all CDNs");
+                };
+                document.head.appendChild(script3);
+            };
+            document.head.appendChild(script2);
+        };
+        document.head.appendChild(script);
+    </script>
+</body>
+</html>
