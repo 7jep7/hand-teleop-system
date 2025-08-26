@@ -1036,6 +1036,16 @@ async def get_web_interface():
     else:
         raise HTTPException(status_code=404, detail="SO-101 simulation interface not found")
 
+@app.get("/so101-simulation", response_class=FileResponse)
+async def get_so101_simulation():
+    """Serve the SO-101 simulation interface (alternative route)"""
+    import os
+    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "web", "so101_simulation.html")
+    if os.path.exists(frontend_path):
+        return FileResponse(frontend_path)
+    else:
+        raise HTTPException(status_code=404, detail="SO-101 simulation interface not found")
+
 @app.get("/stl-test", response_class=FileResponse)
 async def get_stl_test():
     """Serve the STL test page for debugging mesh loading"""

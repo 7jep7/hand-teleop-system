@@ -331,8 +331,8 @@
                 this.animationId = null;
                 
                 // Joint state
-                this.jointNames = ["base", "shoulder_pan", "shoulder_lift", "elbow_flex", "gripper"];
-                this.jointPositions = new Array(5).fill(0);
+                this.jointNames = ["base_link", "shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "gripper"];
+                this.jointPositions = new Array(6).fill(0);  // 6 DOF
                 this.targetPositions = new Array(6).fill(0);
                 
                 // Performance tracking
@@ -387,7 +387,7 @@
                     0.01, 
                     1000
                 );
-                this.camera.position.set(5, 5, 5);  // Start much further out
+                this.camera.position.set(1.2, 1.2, 1.2);  // Good balanced view - not too far, not too close
                 this.camera.lookAt(0, 0, 0.2);
                 
                 // Renderer
@@ -483,52 +483,65 @@
                     this.robot = new THREE.Group();
                     this.robot.name = 'so101_real';
                     
-                    // Define the STL files with proper kinematic hierarchy and relative positioning
+                    // Add debugging info
+                    console.log("Scene before loading robot:", this.scene.children.length, "children");
+                    
+                    // Define the STL files with better spacing for proper robotic arm structure
+                    // Using distinct colors for easy debugging and feedback
                     const robotParts = [
                         { 
                             file: 'Base_SO101.stl', 
-                            color: 0xFFD700, 
-                            position: [0, 0, 0],  // Base at origin
-                            rotation: [0, 0, 0], 
-                            scale: 1,
-                            joint: 'base',
+                            color: 0x8B4513,  // Brown - base/foundation
+                            position: [0, 0, 0],  // Base link at origin
+                            rotation: [0, 0, 0],  // Simplified rotation for now
+                            scale: 0.001,  // Scale down from mm to m
+                            joint: 'base_link',
                             parent: null
                         },
                         { 
                             file: 'sts3215_03a_v1.stl', 
-                            color: 0x202020, 
-                            position: [0, 0, 0.08],  // Motor sits on top of base
-                            rotation: [0, 0, 0], 
-                            scale: 1,
+                            color: 0xFF0000,  // Red - first motor (shoulder pan)
+                            position: [0, 0, 0.08],  // 8cm above base
+                            rotation: [0, 0, 0],  // Simplified
+                            scale: 0.001,  // Scale down
                             joint: 'shoulder_pan',
                             parent: 0  // Attached to base
                         },
                         { 
                             file: 'Upper_arm_SO101.stl', 
-                            color: 0xFFD700, 
-                            position: [0, 0, 0.08],  // Upper arm connects above motor
-                            rotation: [0, 0, 0], 
-                            scale: 1,
+                            color: 0x00FF00,  // Green - upper arm (shoulder lift)
+                            position: [0, 0, 0.06],  // 6cm above motor
+                            rotation: [0, 0, 0],  // Simplified
+                            scale: 0.001,  // Scale down
                             joint: 'shoulder_lift',
-                            parent: 1  // Attached to shoulder_pan motor
+                            parent: 1  // Attached to shoulder_pan
                         },
                         { 
                             file: 'Under_arm_SO101.stl', 
-                            color: 0xFFD700, 
-                            position: [0, 0, 0.15],  // Lower arm extends from upper arm
-                            rotation: [0, 0, 0], 
-                            scale: 1,
+                            color: 0x0000FF,  // Blue - lower arm (elbow flex)
+                            position: [0, 0.15, 0],  // 15cm forward from upper arm
+                            rotation: [0, 0, 0],  // Simplified
+                            scale: 0.001,  // Scale down
                             joint: 'elbow_flex',
                             parent: 2  // Attached to upper arm
                         },
                         { 
-                            file: 'Moving_Jaw_SO101.stl', 
-                            color: 0xFFD700, 
-                            position: [0, 0, 0.12],  // Gripper at end of lower arm
-                            rotation: [0, 0, 0], 
-                            scale: 1,
-                            joint: 'gripper',
+                            file: 'Wrist_Roll_SO101.stl', 
+                            color: 0xFFFF00,  // Yellow - wrist (wrist flex)
+                            position: [0, 0.12, 0],  // 12cm forward from lower arm
+                            rotation: [0, 0, 0],  // Simplified
+                            scale: 0.001,  // Scale down
+                            joint: 'wrist_flex',
                             parent: 3  // Attached to lower arm
+                        },
+                        { 
+                            file: 'Moving_Jaw_SO101.stl', 
+                            color: 0xFF00FF,  // Magenta - gripper (final joint)
+                            position: [0, 0.08, 0],  // 8cm forward from wrist
+                            rotation: [0, 0, 0],  // Simplified
+                            scale: 0.001,  // Scale down
+                            joint: 'gripper',
+                            parent: 4  // Attached to wrist
                         },
                     ];
                     
@@ -568,14 +581,11 @@
                             mesh.receiveShadow = true;
                             mesh.name = part.file;
                             
-                            // Center the geometry so rotation happens around the intended joint point
-                            geometry.computeBoundingBox();
-                            const box = geometry.boundingBox;
-                            const center = box.getCenter(new THREE.Vector3());
+                            // Apply scale (STL files might be in mm, we need m)
+                            mesh.scale.set(part.scale, part.scale, part.scale);
                             
-                            // For most robot parts, we want to center the geometry
-                            // This ensures rotation happens around the geometric center
-                            geometry.translate(-center.x, -center.y, -center.z);
+                            // Apply the specified rotation to the mesh
+                            mesh.rotation.set(...part.rotation);
                             
                             // Position mesh at origin of its joint (important for rotation)
                             mesh.position.set(0, 0, 0);
@@ -610,6 +620,25 @@
                     
                     this.scene.add(this.robot);
                     console.log("✅ SO-101 robot loaded with proper kinematic chain and positioning!");
+                    console.log("Robot group children:", this.robot.children.length);
+                    console.log("Scene after loading robot:", this.scene.children.length, "children");
+                    console.log("Robot bounding box:");
+                    
+                    // Calculate and log bounding box
+                    const box = new THREE.Box3().setFromObject(this.robot);
+                    console.log("Min:", box.min);
+                    console.log("Max:", box.max);
+                    console.log("Size:", box.getSize(new THREE.Vector3()));
+                    
+                    // If robot is too small or too far, adjust camera
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    if (maxDim > 0) {
+                        const distance = maxDim * 2;
+                        this.camera.position.set(distance, distance, distance);
+                        this.camera.lookAt(box.getCenter(new THREE.Vector3()));
+                        console.log("Adjusted camera position to:", this.camera.position);
+                    }
                     
                 } catch (error) {
                     console.error("Error loading robot with STL meshes:", error);
@@ -618,24 +647,101 @@
                 }
             }
             
+            async createPlaceholderRobot() {
+                console.log("Creating placeholder robot with colored cubes...");
+                
+                // Create the robot group
+                this.robot = new THREE.Group();
+                this.robot.name = 'so101_placeholder';
+                
+                // Create simple colored cubes for visualization - better spaced structure
+                // Using distinct colors for easy debugging
+                const robotParts = [
+                    { name: 'base_link', color: 0x8B4513, position: [0, 0, 0], size: [0.08, 0.08, 0.03] },           // Brown
+                    { name: 'shoulder_pan', color: 0xFF0000, position: [0, 0, 0.08], size: [0.05, 0.05, 0.08] },    // Red
+                    { name: 'shoulder_lift', color: 0x00FF00, position: [0, 0, 0.06], size: [0.06, 0.06, 0.10] },   // Green
+                    { name: 'elbow_flex', color: 0x0000FF, position: [0, 0.15, 0], size: [0.05, 0.08, 0.05] },      // Blue
+                    { name: 'wrist_flex', color: 0xFFFF00, position: [0, 0.12, 0], size: [0.04, 0.06, 0.04] },      // Yellow
+                    { name: 'gripper', color: 0xFF00FF, position: [0, 0.08, 0], size: [0.03, 0.05, 0.03] }          // Magenta
+                ];
+                
+                this.robotMeshes = [];
+                this.jointObjects = [];
+                
+                // Create joint groups first
+                for (let i = 0; i < robotParts.length; i++) {
+                    const jointGroup = new THREE.Group();
+                    jointGroup.name = robotParts[i].name;
+                    jointGroup.userData = { jointIndex: i };
+                    this.jointObjects.push(jointGroup);
+                }
+                
+                // Create meshes and build hierarchy
+                for (let i = 0; i < robotParts.length; i++) {
+                    const part = robotParts[i];
+                    
+                    // Create cube geometry
+                    const geometry = new THREE.BoxGeometry(...part.size);
+                    const material = new THREE.MeshLambertMaterial({ color: part.color });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+                    mesh.name = part.name;
+                    
+                    // Add to joint group
+                    const jointGroup = this.jointObjects[i];
+                    jointGroup.add(mesh);
+                    
+                    // Build hierarchy
+                    if (i > 0) {
+                        // Child of previous joint
+                        const parentJoint = this.jointObjects[i - 1];
+                        parentJoint.add(jointGroup);
+                        jointGroup.position.set(...part.position);
+                    } else {
+                        // Root joint
+                        this.robot.add(jointGroup);
+                        jointGroup.position.set(...part.position);
+                    }
+                    
+                    this.robotMeshes.push(mesh);
+                    console.log(`Created placeholder part: ${part.name}`);
+                }
+                
+                this.scene.add(this.robot);
+                console.log("✅ Placeholder robot created!");
+                
+                // Position camera to see the robot at good distance
+                this.camera.position.set(1.2, 1.2, 1.2);
+                this.camera.lookAt(0, 0, 0.2);
+            }
+            
             loadSTLFile(loader, filename) {
                 return new Promise((resolve, reject) => {
                     const url = `/api/assets/robot/so101/${filename}`;
+                    console.log(`🔄 Loading STL: ${url}`);
+                    
                     loader.load(
                         url,
                         (geometry) => {
-                            // Center and scale the geometry
+                            console.log(`✅ Loaded ${filename}:`, geometry);
+                            console.log(`   Vertices: ${geometry.attributes.position.count}`);
+                            
+                            // Compute bounding box for debugging
                             geometry.computeBoundingBox();
                             const box = geometry.boundingBox;
-                            const center = box.getCenter(new THREE.Vector3());
-                            geometry.translate(-center.x, -center.y, -center.z);
+                            console.log(`   Bounding box: min=${box.min.x.toFixed(3)},${box.min.y.toFixed(3)},${box.min.z.toFixed(3)} max=${box.max.x.toFixed(3)},${box.max.y.toFixed(3)},${box.max.z.toFixed(3)}`);
                             
                             resolve(geometry);
                         },
                         (progress) => {
-                            // Progress callback
+                            if (progress.lengthComputable) {
+                                const percentComplete = progress.loaded / progress.total * 100;
+                                console.log(`Loading ${filename}: ${percentComplete.toFixed(1)}%`);
+                            }
                         },
                         (error) => {
+                            console.error(`❌ Failed to load ${filename}:`, error);
                             reject(error);
                         }
                     );
@@ -794,26 +900,24 @@
                     jointObject.rotation.set(0, 0, 0);
                     jointObject.scale.set(1, 1, 1);
                     
-                    // Apply rotation based on joint type and robot kinematics
+                    // Apply rotation based on joint type and URDF-defined axes
                     switch (i) {
-                        case 0: // base - no rotation (static)
+                        case 0: // base_link - no rotation (static)
                             break;
-                        case 1: // shoulder_pan (motor) - rotate around Z axis
-                            // This rotates the entire arm horizontally
+                        case 1: // shoulder_pan - rotate around Z axis (yaw)
                             jointObject.rotation.z = angle;
                             break;
-                        case 2: // shoulder_lift (upper arm) - rotate around Y axis  
-                            // This tilts the upper arm up/down, moving lower arm and gripper too
-                            jointObject.rotation.y = angle;
-                            break;
-                        case 3: // elbow_flex (lower arm) - rotate around Y axis
-                            // This bends the elbow, moving only the lower arm and gripper
-                            jointObject.rotation.y = angle;
-                            break;
-                        case 4: // gripper - rotate and scale for open/close
+                        case 2: // shoulder_lift - rotate around Z axis (pitch relative to shoulder)  
                             jointObject.rotation.z = angle;
-                            const scale = 1 + Math.abs(angle) * 0.1;
-                            jointObject.scale.set(scale, scale, scale);
+                            break;
+                        case 3: // elbow_flex - rotate around Z axis (bend elbow)
+                            jointObject.rotation.z = angle;
+                            break;
+                        case 4: // wrist_flex - rotate around Z axis (wrist bend)
+                            jointObject.rotation.z = angle;
+                            break;
+                        case 5: // gripper - rotate around Z axis (gripper open/close)
+                            jointObject.rotation.z = angle;
                             break;
                     }
                 }
@@ -887,52 +991,90 @@
             }
             
             setJointPosition(jointIndex, value) {
-                const positions = [...this.jointPositions];
-                positions[jointIndex] = value;
+                // Update local joint positions
+                this.jointPositions[jointIndex] = value;
                 
+                // Update the robot visualization immediately
+                this.updateRobotVisualization();
+                
+                // Also send to websocket if connected
                 this.sendMessage({
                     type: "set_joints",
-                    positions: positions,
+                    positions: [...this.jointPositions],
                     smooth: true
                 });
             }
             
             goToHomePosition() {
-                const homePositions = [0, 0, 0, 0, 0, 0];
+                console.log("Going to home position...");
+                const homePositions = [0, 0, 0, 0, 0, 0];  // 6 joints
+                
+                // Update local joint positions
+                this.jointPositions = [...homePositions];
+                
+                // Update the robot visualization
+                this.updateRobotVisualization();
+                
+                // Update sliders to match
+                homePositions.forEach((pos, i) => {
+                    const slider = document.getElementById(`joint-${i}`);
+                    const valueSpan = document.getElementById(`joint-${i}-value`);
+                    if (slider) {
+                        slider.value = pos;
+                        valueSpan.textContent = pos.toFixed(2);
+                    }
+                });
+                
+                // Also send to websocket if connected
                 this.sendMessage({
                     type: "set_joints",
                     positions: homePositions,
                     smooth: true
                 });
-                
-                // Update sliders
-                homePositions.forEach((pos, i) => {
-                    const slider = document.getElementById(`joint-${i}`);
-                    const valueSpan = document.getElementById(`joint-${i}-value`);
-                    slider.value = pos;
-                    valueSpan.textContent = pos.toFixed(2);
-                });
             }
             
             startDemoMotion() {
-                // Simple demo motion sequence
+                console.log("Starting demo motion sequence...");
+                // Simple demo motion sequence - showcasing robot capabilities
                 const motions = [
-                    [0.5, 0.3, -0.5, 0.2, 0.8, 0.5],
-                    [-0.5, -0.3, 0.5, -0.2, -0.8, 0.2],
-                    [0, 0.5, -0.8, 0.5, 0, 1.0],
-                    [0, 0, 0, 0, 0, 0]
+                    [0, 0, 0, 0, 0, 0],                    // Start at home
+                    [0.5, 0.3, -0.5, 0.2, 0.8, 0.5],     // Reach forward and up
+                    [-0.5, -0.3, 0.5, -0.2, -0.8, -0.5], // Swing to other side
+                    [0, 0.8, -1.2, 0.5, 0, 1.0],         // Tall reach
+                    [0, 0, 0, 0, 0, 0]                    // Return home
                 ];
                 
                 let motionIndex = 0;
                 const playNextMotion = () => {
                     if (motionIndex < motions.length) {
+                        const positions = motions[motionIndex];
+                        console.log(`Demo motion ${motionIndex + 1}/${motions.length}:`, positions);
+                        
+                        // Update local positions and visualization
+                        this.jointPositions = [...positions];
+                        this.updateRobotVisualization();
+                        
+                        // Update sliders
+                        positions.forEach((pos, i) => {
+                            const slider = document.getElementById(`joint-${i}`);
+                            const valueSpan = document.getElementById(`joint-${i}-value`);
+                            if (slider) {
+                                slider.value = pos;
+                                valueSpan.textContent = pos.toFixed(2);
+                            }
+                        });
+                        
+                        // Send to websocket if connected
                         this.sendMessage({
                             type: "set_joints",
-                            positions: motions[motionIndex],
+                            positions: positions,
                             smooth: true
                         });
+                        
                         motionIndex++;
-                        setTimeout(playNextMotion, 2000);
+                        setTimeout(playNextMotion, 2000);  // 2 second delay between motions
+                    } else {
+                        console.log("Demo motion sequence complete!");
                     }
                 };
                 
@@ -940,10 +1082,31 @@
             }
             
             randomMotion() {
-                const randomPositions = this.jointNames.map(() => 
-                    (Math.random() - 0.5) * 2 * Math.PI
-                );
+                console.log("Generating random motion...");
+                // Generate random positions within reasonable joint limits
+                const randomPositions = [];
+                for (let i = 0; i < 6; i++) {  // 6 joints
+                    const randomAngle = (Math.random() - 0.5) * Math.PI;  // ±90 degrees
+                    randomPositions.push(randomAngle);
+                }
                 
+                console.log("Random positions:", randomPositions);
+                
+                // Update local positions and visualization
+                this.jointPositions = [...randomPositions];
+                this.updateRobotVisualization();
+                
+                // Update sliders
+                randomPositions.forEach((pos, i) => {
+                    const slider = document.getElementById(`joint-${i}`);
+                    const valueSpan = document.getElementById(`joint-${i}-value`);
+                    if (slider) {
+                        slider.value = pos;
+                        valueSpan.textContent = pos.toFixed(2);
+                    }
+                });
+                
+                // Send to websocket if connected
                 this.sendMessage({
                     type: "set_joints",
                     positions: randomPositions,
@@ -952,7 +1115,20 @@
             }
             
             resetRobot() {
+                console.log("Resetting robot to default state...");
+                // Reset robot means: stop any ongoing motions, clear errors, and go to home position
+                
+                // Stop any ongoing demo motion by clearing any timeouts
+                // (In a real implementation, you'd track and clear specific timeouts)
+                
+                // Reset to home position
                 this.goToHomePosition();
+                
+                // Reset camera to default view (not too close, not too far)
+                this.camera.position.set(1.2, 1.2, 1.2);
+                this.camera.lookAt(0, 0, 0.2);
+                
+                console.log("Robot reset complete - returned to home position and default camera view");
             }
             
             startPingLoop() {
