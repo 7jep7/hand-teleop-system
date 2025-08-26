@@ -387,8 +387,8 @@
                     0.01, 
                     1000
                 );
-                this.camera.position.set(1.2, 1.2, 1.2);  // Good balanced view - not too far, not too close
-                this.camera.lookAt(0, 0, 0.2);
+                this.camera.position.set(0.6, 0.6, 0.6);  // Closer view for better detail
+                this.camera.lookAt(0, 0.1, 0.1);  // Look at robot center
                 
                 // Renderer
                 this.renderer = new THREE.WebGLRenderer({ 
@@ -400,21 +400,39 @@
                 this.renderer.setPixelRatio(window.devicePixelRatio);
                 this.renderer.shadowMap.enabled = true;
                 this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 1.2;
                 
-                // Lighting
-                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                // Bright lighting setup for maximum robot visibility
+                const ambientLight = new THREE.AmbientLight(0x808080, 0.8);  // Much brighter ambient
                 this.scene.add(ambientLight);
                 
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                directionalLight.position.set(1, 1, 1);
-                directionalLight.castShadow = true;
-                directionalLight.shadow.mapSize.width = 2048;
-                directionalLight.shadow.mapSize.height = 2048;
-                this.scene.add(directionalLight);
+                // Main key light - very bright
+                const keyLight = new THREE.DirectionalLight(0xffffff, 1.5);
+                keyLight.position.set(2, 3, 1);
+                keyLight.castShadow = true;
+                keyLight.shadow.mapSize.width = 2048;
+                keyLight.shadow.mapSize.height = 2048;
+                keyLight.shadow.camera.near = 0.1;
+                keyLight.shadow.camera.far = 10;
+                keyLight.shadow.camera.left = -2;
+                keyLight.shadow.camera.right = 2;
+                keyLight.shadow.camera.top = 2;
+                keyLight.shadow.camera.bottom = -2;
+                this.scene.add(keyLight);
                 
-                // Ground plane
+                // Additional fill lights for even better visibility
+                const fillLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+                fillLight1.position.set(-1, 1, 2);
+                this.scene.add(fillLight1);
+                
+                const fillLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
+                fillLight2.position.set(-1, -0.5, -1);
+                this.scene.add(fillLight2);
+                
+                // Ground plane with dark modern surface
                 const groundGeometry = new THREE.PlaneGeometry(2, 2);
-                const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+                const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x0f1419 });
                 const ground = new THREE.Mesh(groundGeometry, groundMaterial);
                 ground.rotation.x = -Math.PI / 2;
                 ground.receiveShadow = true;
@@ -430,7 +448,7 @@
             setupCameraControls(canvas) {
                 let isMouseDown = false;
                 let mouseX = 0, mouseY = 0;
-                let cameraRadius = 15;  // Start much further out
+                let cameraRadius = 1.0;  // Start closer for better detail
                 let cameraTheta = Math.PI / 4;
                 let cameraPhi = Math.PI / 4;
                 
@@ -487,58 +505,58 @@
                     console.log("Scene before loading robot:", this.scene.children.length, "children");
                     
                     // Define the STL files with better spacing for proper robotic arm structure
-                    // Using distinct colors for easy debugging and feedback
+                    // Super bright colors for maximum visibility
                     const robotParts = [
                         { 
                             file: 'Base_SO101.stl', 
-                            color: 0x8B4513,  // Brown - base/foundation
+                            color: 0xE0E0E0,  // Light grey - base/foundation
                             position: [0, 0, 0],  // Base link at origin
-                            rotation: [0, 0, 0],  // Simplified rotation for now
+                            rotation: [0, 0, 0],  // Base orientation
                             scale: 0.001,  // Scale down from mm to m
                             joint: 'base_link',
                             parent: null
                         },
                         { 
                             file: 'sts3215_03a_v1.stl', 
-                            color: 0xFF0000,  // Red - first motor (shoulder pan)
-                            position: [0, 0, 0.08],  // 8cm above base
-                            rotation: [0, 0, 0],  // Simplified
+                            color: 0xFFFFFF,  // Pure white - shoulder motor (pan)
+                            position: [0, 0, 0.04],  // 4cm above base center
+                            rotation: [0, 0, 0],  // Upright motor
                             scale: 0.001,  // Scale down
                             joint: 'shoulder_pan',
                             parent: 0  // Attached to base
                         },
                         { 
                             file: 'Upper_arm_SO101.stl', 
-                            color: 0x00FF00,  // Green - upper arm (shoulder lift)
-                            position: [0, 0, 0.06],  // 6cm above motor
-                            rotation: [0, 0, 0],  // Simplified
+                            color: 0xE0E0E0,  // Light grey - upper arm (shoulder lift)
+                            position: [0, 0, 0.03],  // 3cm above motor
+                            rotation: [-Math.PI/2, 0, 0],  // Rotate to extend horizontally
                             scale: 0.001,  // Scale down
                             joint: 'shoulder_lift',
                             parent: 1  // Attached to shoulder_pan
                         },
                         { 
                             file: 'Under_arm_SO101.stl', 
-                            color: 0x0000FF,  // Blue - lower arm (elbow flex)
-                            position: [0, 0.15, 0],  // 15cm forward from upper arm
-                            rotation: [0, 0, 0],  // Simplified
+                            color: 0xFFFFFF,  // Pure white - lower arm (elbow flex)
+                            position: [0, 0.10, 0],  // 10cm forward from upper arm
+                            rotation: [0, 0, 0],  // Continue horizontal
                             scale: 0.001,  // Scale down
                             joint: 'elbow_flex',
                             parent: 2  // Attached to upper arm
                         },
                         { 
                             file: 'Wrist_Roll_SO101.stl', 
-                            color: 0xFFFF00,  // Yellow - wrist (wrist flex)
-                            position: [0, 0.12, 0],  // 12cm forward from lower arm
-                            rotation: [0, 0, 0],  // Simplified
+                            color: 0xE0E0E0,  // Light grey - wrist (wrist flex)
+                            position: [0, 0.08, 0],  // 8cm forward from lower arm
+                            rotation: [0, 0, 0],  // Continue alignment
                             scale: 0.001,  // Scale down
                             joint: 'wrist_flex',
                             parent: 3  // Attached to lower arm
                         },
                         { 
                             file: 'Moving_Jaw_SO101.stl', 
-                            color: 0xFF00FF,  // Magenta - gripper (final joint)
-                            position: [0, 0.08, 0],  // 8cm forward from wrist
-                            rotation: [0, 0, 0],  // Simplified
+                            color: 0xFFFFFF,  // Pure white - gripper (final joint)
+                            position: [0, 0.05, 0],  // 5cm forward from wrist
+                            rotation: [0, 0, 0],  // End effector alignment
                             scale: 0.001,  // Scale down
                             joint: 'gripper',
                             parent: 4  // Attached to wrist
@@ -569,9 +587,11 @@
                             console.log(`Loading ${part.file}...`);
                             const geometry = await this.loadSTLFile(stlLoader, part.file);
                             
-                            // Create material
-                            const material = new THREE.MeshLambertMaterial({ 
+                            // Create metallic material for modern look
+                            const material = new THREE.MeshStandardMaterial({ 
                                 color: part.color,
+                                metalness: 0.8,
+                                roughness: 0.3,
                                 side: THREE.DoubleSide
                             });
                             
@@ -654,15 +674,14 @@
                 this.robot = new THREE.Group();
                 this.robot.name = 'so101_placeholder';
                 
-                // Create simple colored cubes for visualization - better spaced structure
-                // Using distinct colors for easy debugging
+                // Super bright placeholder cubes for maximum visibility
                 const robotParts = [
-                    { name: 'base_link', color: 0x8B4513, position: [0, 0, 0], size: [0.08, 0.08, 0.03] },           // Brown
-                    { name: 'shoulder_pan', color: 0xFF0000, position: [0, 0, 0.08], size: [0.05, 0.05, 0.08] },    // Red
-                    { name: 'shoulder_lift', color: 0x00FF00, position: [0, 0, 0.06], size: [0.06, 0.06, 0.10] },   // Green
-                    { name: 'elbow_flex', color: 0x0000FF, position: [0, 0.15, 0], size: [0.05, 0.08, 0.05] },      // Blue
-                    { name: 'wrist_flex', color: 0xFFFF00, position: [0, 0.12, 0], size: [0.04, 0.06, 0.04] },      // Yellow
-                    { name: 'gripper', color: 0xFF00FF, position: [0, 0.08, 0], size: [0.03, 0.05, 0.03] }          // Magenta
+                    { name: 'base_link', color: 0xE0E0E0, position: [0, 0, 0], size: [0.08, 0.08, 0.03] },           // Light grey base
+                    { name: 'shoulder_pan', color: 0xFFFFFF, position: [0, 0, 0.04], size: [0.05, 0.05, 0.06] },     // Pure white motor
+                    { name: 'shoulder_lift', color: 0xE0E0E0, position: [0, 0, 0.03], size: [0.04, 0.10, 0.04] },    // Light grey upper arm
+                    { name: 'elbow_flex', color: 0xFFFFFF, position: [0, 0.10, 0], size: [0.04, 0.08, 0.04] },       // Pure white lower arm
+                    { name: 'wrist_flex', color: 0xE0E0E0, position: [0, 0.08, 0], size: [0.03, 0.05, 0.03] },       // Light grey wrist
+                    { name: 'gripper', color: 0xFFFFFF, position: [0, 0.05, 0], size: [0.03, 0.04, 0.03] }           // Pure white gripper
                 ];
                 
                 this.robotMeshes = [];
@@ -680,9 +699,13 @@
                 for (let i = 0; i < robotParts.length; i++) {
                     const part = robotParts[i];
                     
-                    // Create cube geometry
+                    // Create cube geometry with metallic material
                     const geometry = new THREE.BoxGeometry(...part.size);
-                    const material = new THREE.MeshLambertMaterial({ color: part.color });
+                    const material = new THREE.MeshStandardMaterial({ 
+                        color: part.color,
+                        metalness: 0.8,
+                        roughness: 0.3
+                    });
                     const mesh = new THREE.Mesh(geometry, material);
                     mesh.castShadow = true;
                     mesh.receiveShadow = true;
@@ -712,8 +735,8 @@
                 console.log("✅ Placeholder robot created!");
                 
                 // Position camera to see the robot at good distance
-                this.camera.position.set(1.2, 1.2, 1.2);
-                this.camera.lookAt(0, 0, 0.2);
+                this.camera.position.set(0.6, 0.6, 0.6);
+                this.camera.lookAt(0, 0.1, 0.1);
             }
             
             loadSTLFile(loader, filename) {
@@ -1124,9 +1147,9 @@
                 // Reset to home position
                 this.goToHomePosition();
                 
-                // Reset camera to default view (not too close, not too far)
-                this.camera.position.set(1.2, 1.2, 1.2);
-                this.camera.lookAt(0, 0, 0.2);
+                // Reset camera to default view (closer for better detail)
+                this.camera.position.set(0.6, 0.6, 0.6);
+                this.camera.lookAt(0, 0.1, 0.1);
                 
                 console.log("Robot reset complete - returned to home position and default camera view");
             }
