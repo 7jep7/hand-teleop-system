@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from hand_teleop.gripper_pose.gripper_pose import GripperPose
+from core.robot_control.gripper_pose import GripperPose
 
 
 class GripperPoseVisualizer:

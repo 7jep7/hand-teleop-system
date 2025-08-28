@@ -24,6 +24,11 @@ from datetime import datetime
 from pathlib import Path
 import uvicorn
 
+# Fix PYTHONPATH for imports (robust absolute path)
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 # Initialize FastAPI
 app = FastAPI(
     title="Hand Teleop System API",
@@ -189,7 +194,11 @@ try:
     so101_available = True
     print("✅ SO-101 simulation initialized")
 except Exception as e:
+    import traceback
     print(f"⚠️  SO-101 simulation not available: {e}")
+    print(f"sys.path: {sys.path}")
+    print(f"cwd: {os.getcwd()}")
+    print(traceback.format_exc())
     so101_available = False
     so101_sim = None
 

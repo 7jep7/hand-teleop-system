@@ -15,17 +15,8 @@ echo "✅ Python 3 available"
 # Check dependencies
 echo "📦 Checking dependencies..."
 
-# Create virtual environment if needed
-if [ ! -d "venv" ]; then
-    echo "🔧 Creating virtual environment..."
-    python3 -m venv venv
-fi
 
-echo "🔧 Activating virtual environment..."
-source venv/bin/activate
-
-echo "📥 Installing dependencies..."
-pip install -q fastapi uvicorn opencv-python-headless numpy mediapipe websockets pydantic
+echo "(Skipping venv and pip install: using conda environment)"
 
 echo "🧪 Testing API..."
 python3 -c "

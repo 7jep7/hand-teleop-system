@@ -12,6 +12,10 @@
     <!-- Three.js and Physics Libraries -->
     <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
     <script src="https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"></script>
+    
+    <!-- STL Loader for SO-101 robot meshes -->
+    <script src="https://unpkg.com/three@0.158.0/examples/js/loaders/STLLoader.js"></script>
+    
     <!-- OrbitControls as inline script -->
     <script>
         // Simple camera controls to replace OrbitControls if needed
@@ -96,60 +100,46 @@
         }
     </script>
     <style>
-        .camera-container {
-            position: relative;
-            background: #1f2937;
-            border-radius: 0.5rem;
-            overflow: hidden;
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        #canvas-container { 
+            position: relative; 
+            width: 100vw; 
+            height: 70vh; 
+            background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 100%);
         }
-        .processing {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        #controls { 
+            background: rgba(15, 23, 42, 0.95); 
+            backdrop-filter: blur(10px);
         }
-        .capture-btn {
-            transition: all 0.3s ease;
+        .joint-slider {
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #334155;
+            outline: none;
         }
-        .capture-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-        }
-        .capture-btn:disabled {
-            transform: none;
-            box-shadow: none;
-        }
-        .result-fade-in {
-            animation: fadeIn 0.5s ease-in;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .loading-spinner {
-            border: 4px solid #f3f4f6;
-            border-top: 4px solid #3b82f6;
+        .joint-slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 20px;
+            height: 20px;
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
+            background: #3b82f6;
+            cursor: pointer;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
         }
-        
-        .analytics-panel {
-            transition: all 0.3s ease-in-out;
-        }
-        
-        .robot-status-connected {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-        
-        .joint-value {
-            transition: all 0.2s ease;
-        }
-        
-        .model-toggle {
-            transition: all 0.2s ease;
+        .status-connected { background-color: #22c55e; }
+        .status-disconnected { background-color: #ef4444; }
+        .status-loading { background-color: #f59e0b; animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
     </style>
 </head>
@@ -177,137 +167,45 @@
         
         <!-- Main Content -->
         <div class="max-w-7xl mx-auto">
-            <!-- Robot Control View (Main/Primary) -->
-            <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-semibold text-gray-800 flex items-center">
-                        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 9.172V5L8 4z"></path>
-                        </svg>
-                        Robot Control
-                    </h2>
-                    
-                    <!-- Robot Model Selection -->
-                    <div class="flex items-center space-x-3">
-                        <label class="text-sm font-medium text-gray-700">Manipulator:</label>
-                        <select id="robotSelect" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                            <option value="so-101">SO-101 (6-DoF)</option>
-                            <option value="so-100">SO-100 (5-DoF)</option>
-                            <option value="koch">Koch v1.1</option>
-                            <option value="moss">MOSS</option>
-                            <option value="custom">Custom URDF</option>
-                        </select>
+            <!-- SO-101 Advanced Render Integration -->
+            <div class="flex h-[70vh] bg-slate-900 rounded-lg shadow-lg mb-8">
+                <!-- 3D Viewport -->
+                <div id="canvas-container" class="flex-1 relative">
+                    <canvas id="robot-canvas" class="w-full h-full"></canvas>
+                    <!-- Loading Overlay -->
+                    <div id="loading-overlay" class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                        <div class="text-center">
+                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                            <p class="text-lg">Loading SO-101 Robot...</p>
+                            <p id="loading-status" class="text-sm text-slate-400">Initializing...</p>
+                        </div>
                     </div>
                 </div>
-                
-                <!-- Robot Visualization Area -->
-                <div class="space-y-6">
-                    <!-- 3D Robot View -->
-                    <div class="w-full">
-                        <div class="bg-gray-900 rounded-lg h-80 md:h-96 relative overflow-hidden">
-                            <canvas id="robotCanvas" class="w-full h-full rounded-lg"></canvas>
-                            <div id="robotLoadingOverlay" class="absolute inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center text-white">
-                                <div class="text-center">
-                                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-                                    <div>Loading robot model...</div>
-                                </div>
-                            </div>
-                        </div>
+                <!-- Control Panel -->
+                <div id="controls" class="w-80 p-6 overflow-y-auto">
+                    <h3 class="text-lg font-semibold mb-4">Joint Controls</h3>
+                    <div id="joint-controls" class="space-y-4"></div>
+                    <hr class="border-slate-600 my-6">
+                    <h3 class="text-lg font-semibold mb-4">Robot Information</h3>
+                    <div id="robot-info" class="space-y-2 text-sm">
+                        <div>Model: <span class="text-blue-400">SO-101</span></div>
+                        <div>DOF: <span id="dof-display" class="text-blue-400">6</span></div>
+                        <div>Status: <span id="robot-status" class="text-green-400">Ready</span></div>
                     </div>
-                    
-                    <!-- Robot Status & Controls -->
-                    <!-- Control Buttons -->
-                    <div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
-                        <button id="robotTrackingToggle" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition-colors">
-                            Start Hand Tracking
-                        </button>
-                        <button id="connectRobot" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition-colors">
-                            Enable Hand Control
-                        </button>
-                        <button id="homeRobot" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition-colors">
-                            Reset Position
-                        </button>
-                        <button id="addObject" class="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition-colors">
-                            Demo Movement
-                        </button>
-                        <button id="emergencyStop" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-3 rounded-lg text-sm transition-colors col-span-2 md:col-span-1">
-                            Stop All Motion
-                        </button>
+                    <hr class="border-slate-600 my-6">
+                    <h3 class="text-lg font-semibold mb-4">Demo Controls</h3>
+                    <div class="space-y-3">
+                        <button id="home-position" class="w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded transition">Home Position</button>
+                        <button id="demo-motion" class="w-full bg-green-600 hover:bg-green-700 px-4 py-2 rounded transition">Demo Motion</button>
+                        <button id="random-motion" class="w-full bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded transition">Random Motion</button>
+                        <button id="reset-robot" class="w-full bg-red-600 hover:bg-red-700 px-4 py-2 rounded transition">Reset Robot</button>
                     </div>
-                    
-                    <div class="grid md:grid-cols-3 gap-4">
-                        <!-- Robot Status -->
-                        <div class="bg-gray-50 rounded-lg p-3">
-                            <h4 class="font-semibold text-gray-800 mb-2 text-sm">System Status</h4>
-                            <div class="space-y-1 text-xs">
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Hand Tracking:</span>
-                                    <span id="robotConnection" class="font-medium text-red-600">Inactive</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Robot Model:</span>
-                                    <span id="robotModel" class="font-medium text-gray-800">SO-101</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Control Mode:</span>
-                                    <span id="trackingStatus" class="font-medium text-gray-600">Simulation</span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Joint Positions -->
-                        <div class="bg-gray-50 rounded-lg p-3">
-                            <h4 class="font-semibold text-gray-800 mb-2 text-sm">Joint Positions</h4>
-                            <div class="space-y-1 text-xs">
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Base:</span>
-                                    <span id="joint0" class="font-mono text-gray-800">0.0°</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Shoulder:</span>
-                                    <span id="joint1" class="font-mono text-gray-800">0.0°</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Elbow:</span>
-                                    <span id="joint2" class="font-mono text-gray-800">0.0°</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Wrist 1:</span>
-                                    <span id="joint3" class="font-mono text-gray-800">0.0°</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Wrist 2:</span>
-                                    <span id="joint4" class="font-mono text-gray-800">0.0°</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Wrist 3:</span>
-                                    <span id="joint5" class="font-mono text-gray-800">0.0°</span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- End Effector Position -->
-                        <div class="bg-blue-50 rounded-lg p-3">
-                            <h4 class="font-semibold text-blue-800 mb-2 text-sm">End Effector</h4>
-                            <div class="space-y-1 text-xs">
-                                <div class="flex justify-between">
-                                    <span class="text-blue-600">X Position:</span>
-                                    <span id="endEffectorX" class="font-mono text-blue-800">0.000 m</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-blue-600">Y Position:</span>
-                                    <span id="endEffectorY" class="font-mono text-blue-800">0.000 m</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-blue-600">Z Position:</span>
-                                    <span id="endEffectorZ" class="font-mono text-blue-800">0.000 m</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-blue-600">Gripper:</span>
-                                    <span id="gripperState" class="font-mono text-blue-800">Open</span>
-                                </div>
-                            </div>
-                        </div>
+                    <hr class="border-slate-600 my-6">
+                    <h3 class="text-lg font-semibold mb-4">Debug Info</h3>
+                    <div id="debug-info" class="text-xs space-y-1 font-mono text-slate-400">
+                        <div>Messages: <span id="msg-count">0</span></div>
+                        <div>Last Update: <span id="last-update">Never</span></div>
+                        <div>WebSocket: <span id="ws-status">Disconnected</span></div>
                     </div>
                 </div>
             </div>
@@ -368,147 +266,19 @@
                                 <div id="pipCoords" class="text-blue-600">-</div>
                             </div>
                             <div class="bg-red-100 p-2 rounded">
-                                <div class="font-medium text-red-800">Index Tip</div>
-                                <div id="tipCoords" class="text-red-600">-</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Status -->
-                    <div id="status" class="text-center p-3 rounded-lg bg-blue-50 text-blue-700">
-                        Click "Start Camera" to begin
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Right Side - Results -->
-            <div class="bg-white rounded-lg shadow-lg p-6">
-                <h2 class="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
-                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                    </svg>
-                    Tracking Results
-                </h2>
-                
-                <!-- Results Display -->
-                <div id="resultsContainer" class="space-y-4">
-                    <!-- Default State -->
-                    <div id="defaultState" class="text-center py-8">
-                        <div class="w-16 h-16 mx-auto mb-4 bg-gray-200 rounded-full flex items-center justify-center">
-                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 4h10m-10 0V7a2 2 0 012-2h6a2 2 0 012 2v1m-10 0v10a2 2 0 002 2h6a2 2 0 002-2V8"></path>
-                            </svg>
-                        </div>
-                        <p class="text-gray-600">Start live tracking to see real-time fingertip positions</p>
-                    </div>
-                    
-                    <!-- Live Tracking State -->
-                    <div id="liveState" class="hidden">
-                        <div class="bg-green-50 rounded-lg p-4 mb-4">
-                            <div class="flex items-center mb-2">
-                                <div class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                                <span class="text-green-800 font-medium">Live Tracking Active</span>
-                                <span id="fps" class="ml-auto text-green-600 text-sm">- FPS</span>
-                            </div>
-                            <div class="text-green-700 text-sm">
-                                Show your hand to see real-time fingertip detection
-                            </div>
-                        </div>
-                        
-                        <!-- Robot Control Preview -->
-                        <div id="robotPreview" class="hidden bg-blue-50 rounded-lg p-4 mb-4">
-                            <h4 class="font-semibold text-blue-800 mb-2">Robot Control Mapping:</h4>
-                            <div class="grid grid-cols-2 gap-2 text-sm">
-                                <div class="text-blue-700">X Position: <span id="robotX" class="font-mono">0.0</span></div>
-                                <div class="text-blue-700">Y Position: <span id="robotY" class="font-mono">0.0</span></div>
-                                <div class="text-blue-700">Z Position: <span id="robotZ" class="font-mono">0.0</span></div>
-                                <div class="text-blue-700">Gripper: <span id="robotGripper" class="font-mono">Open</span></div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Processing State -->
-                    <div id="processingState" class="hidden text-center py-8">
-                        <div class="loading-spinner mx-auto mb-4"></div>
-                        <p class="text-blue-600 font-medium">Processing with WiLoR...</p>
-                        <p class="text-gray-500 text-sm mt-2">This may take 20-30 seconds on first run</p>
-                    </div>
-                    
-                    <!-- Results State -->
-                    <div id="resultsState" class="hidden">
-                        <div id="overlayContainer" class="mb-4">
-                            <img id="overlayImage" class="w-full rounded-lg shadow-md" alt="Hand tracking overlay">
-                        </div>
-                        
-                        <div id="handData" class="bg-gray-50 rounded-lg p-4">
-                            <h3 class="font-semibold text-gray-800 mb-2">Detection Results:</h3>
-                            <div id="handStats" class="text-sm text-gray-600 space-y-1">
-                                <!-- Hand statistics will be populated here -->
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Error State -->
-                    <div id="errorState" class="hidden text-center py-8">
-                        <div class="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                            <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                        </div>
-                        <p id="errorMessage" class="text-red-600 font-medium"></p>
-                    </div>
-                </div>
-                
-                <!-- Instructions -->
-                <div class="mt-6 bg-blue-50 rounded-lg p-4">
-                    <h4 class="font-semibold text-blue-800 mb-2">How to use:</h4>
-                    <ul class="text-blue-700 text-sm space-y-1">
-                        <li>• <strong>Live Tracking:</strong> Real-time fingertip detection with MediaPipe</li>
-                        <li>• <strong>WiLoR Processing:</strong> High-quality capture analysis</li>
-                        <li>• Position your <strong>RIGHT hand</strong> in the camera view</li>
-                        <li>• Three key points: Thumb tip, Index PIP, Index tip</li>
-                    </ul>
-                    
-                    <h4 class="font-semibold text-blue-800 mt-4 mb-2">Overlay Legend:</h4>
-                    <ul class="text-blue-700 text-sm space-y-1">
-                        <li>• <span class="inline-block w-3 h-3 bg-yellow-400 rounded-full mr-2"></span>Yellow = Thumb tip</li>
-                        <li>• <span class="inline-block w-3 h-3 bg-blue-500 rounded-full mr-2"></span>Blue = Index PIP joint</li>
-                        <li>• <span class="inline-block w-3 h-3 bg-red-500 rounded-full mr-2"></span>Red = Index fingertip</li>
-                    </ul>
-                </div>
-            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // 3D Robot Visualization with Three.js and Cannon.js Physics
-        class RobotVisualization {
-            constructor(canvasId) {
-                this.canvas = document.getElementById(canvasId);
-                this.loadingOverlay = document.getElementById('robotLoadingOverlay');
-                
-                // Three.js setup
-                this.scene = null;
-                this.camera = null;
-                this.renderer = null;
-                this.controls = null;
-                
-                // Physics setup
-                this.world = null;
-                this.robotBodies = [];
-                
-                // Robot state
-                this.robotType = 'so-101';
-                this.jointAngles = [0, 0, 0, 0, 0, 0];
-                this.endEffectorTarget = { x: 0, y: 0, z: 0.5 };
-                
-                // Robot parts
-                this.robotParts = {};
-                this.joints = [];
+                                <!-- Advanced SO-101 Simulation Script (from so101_simulation.html) -->
+                                <script>
+                                    // STLLoader class (inlined from advanced render)
+                                    class STLLoader extends THREE.Loader {
+                                        // ...existing code from so101_simulation.html...
+                                    }
+                                    // SO-101 Robot Simulation Controller (from so101_simulation.html)
+                                    // ...full SO101Simulation class from so101_simulation.html...
+                                    // Initialize simulation when page loads
+                                    document.addEventListener('DOMContentLoaded', () => {
+                                        new SO101Simulation();
+                                    });
+                                </script>
                 
                 // Objects in scene
                 this.objects = [];
@@ -612,213 +382,396 @@
             }
             
             async loadRobot() {
-                // Create a procedural robot model (SO-101 style)
-                this.createProceduralRobot();
-            }
-            
-            createProceduralRobot() {
-                const robotGroup = new THREE.Group();
-                robotGroup.name = 'robot';
-                
-                // Professional material colors
-                const baseMaterial = new THREE.MeshLambertMaterial({ color: 0x2d3748 }); // Dark blue-gray
-                const linkMaterial = new THREE.MeshLambertMaterial({ color: 0x4a5568 }); // Medium gray
-                const jointMaterial = new THREE.MeshLambertMaterial({ color: 0x1a202c }); // Very dark gray
-                const endEffectorMaterial = new THREE.MeshLambertMaterial({ color: 0xe53e3e }); // Distinct red for end-effector
-                
-                // Create nested groups for proper joint hierarchy
-                const baseGroup = new THREE.Group();
-                const link1Group = new THREE.Group();
-                const link2Group = new THREE.Group();
-                const link3Group = new THREE.Group();
-                const wristGroup = new THREE.Group();
-                
-                // Base (fixed)
-                const baseGeometry = new THREE.CylinderGeometry(0.06, 0.08, 0.08, 16);
-                const base = new THREE.Mesh(baseGeometry, baseMaterial);
-                base.position.set(0, 0, 0.04);
-                baseGroup.add(base);
-                
-                // Link 1 - Shoulder joint (rotates with base)
-                const link1Geometry = new THREE.CylinderGeometry(0.04, 0.04, 0.12, 12);
-                const link1 = new THREE.Mesh(link1Geometry, jointMaterial);
-                link1.position.set(0, 0, 0.10); // Relative to base
-                link1Group.add(link1);
-                
-                // Link 2 - Upper arm (connected to link1)
-                const link2Geometry = new THREE.BoxGeometry(0.25, 0.035, 0.05);
-                const link2 = new THREE.Mesh(link2Geometry, linkMaterial);
-                link2.position.set(0.125, 0, 0.06); // Relative to link1
-                link2Group.add(link2);
-                
-                // Elbow joint (at end of upper arm)
-                const elbowGeometry = new THREE.SphereGeometry(0.025, 12, 8);
-                const elbow = new THREE.Mesh(elbowGeometry, jointMaterial);
-                elbow.position.set(0.25, 0, 0.06); // At end of upper arm
-                link2Group.add(elbow);
-                
-                // Link 3 - Forearm (connected to elbow)
-                const link3Geometry = new THREE.BoxGeometry(0.18, 0.03, 0.04);
-                const link3 = new THREE.Mesh(link3Geometry, linkMaterial);
-                link3.position.set(0.09, 0, 0); // Relative to elbow
-                link3Group.add(link3);
-                
-                // Wrist assembly (at end of forearm)
-                const wristGeometry = new THREE.BoxGeometry(0.06, 0.04, 0.04);
-                const wrist = new THREE.Mesh(wristGeometry, jointMaterial);
-                wrist.position.set(0.18, 0, 0); // At end of forearm
-                wristGroup.add(wrist);
-                
-                // End effector - distinct color
-                const gripperBase = new THREE.BoxGeometry(0.05, 0.025, 0.08);
-                const gripper = new THREE.Mesh(gripperBase, endEffectorMaterial);
-                gripper.position.set(0.05, 0, 0); // Relative to wrist
-                wristGroup.add(gripper);
-                
-                // Gripper fingers - same end-effector color
-                const fingerGeometry = new THREE.BoxGeometry(0.02, 0.008, 0.025);
-                const finger1 = new THREE.Mesh(fingerGeometry, endEffectorMaterial);
-                finger1.position.set(0.075, 0.015, 0);
-                wristGroup.add(finger1);
-                
-                const finger2 = new THREE.Mesh(fingerGeometry, endEffectorMaterial);
-                finger2.position.set(0.075, -0.015, 0);
-                wristGroup.add(finger2);
-                
-                // Build hierarchy: base -> link1 -> link2 -> link3 -> wrist
-                baseGroup.add(link1Group);
-                link1Group.position.set(0, 0, 0.08);
-                
-                link1Group.add(link2Group);
-                link2Group.position.set(0, 0, 0.06);
-                
-                link2Group.add(link3Group);
-                link3Group.position.set(0.25, 0, 0);
-                
-                link3Group.add(wristGroup);
-                wristGroup.position.set(0.18, 0, 0);
-                
-                robotGroup.add(baseGroup);
-                
-                // Store robot parts and groups for animation
-                this.robotParts = {
-                    base: base,
-                    baseGroup: baseGroup,
-                    link1: link1,
-                    link1Group: link1Group,
-                    link2: link2,
-                    link2Group: link2Group,
-                    elbow: elbow,
-                    link3: link3,
-                    link3Group: link3Group,
-                    wrist: wrist,
-                    wristGroup: wristGroup,
-                    gripper: gripper,
-                    finger1: finger1,
-                    finger2: finger2
-                };
-                
-                this.scene.add(robotGroup);
-            }
-            
-            addRobotPhysics() {
-                // Only add physics if world is available
-                if (!this.world) return;
-                
-                // Add physics bodies for each robot part
-                // This is simplified - in a real implementation you'd have proper joint constraints
-                
                 try {
-                    // Base physics body
-                    const baseShape = new CANNON.Cylinder(0.08, 0.1, 0.1, 8);
-                    const baseBody = new CANNON.Body({ mass: 10 });
-                    baseBody.addShape(baseShape);
-                    baseBody.position.set(0, 0, 0.05);
-                    this.world.add(baseBody);
-                    this.robotBodies.push(baseBody);
+                    console.log("Loading SO-101 robot with real STL meshes...");
+                    await this.createSO101Robot();
                 } catch (error) {
-                    console.warn('Failed to add robot physics:', error.message);
+                    console.error("Error loading SO-101 robot:", error);
+                    console.log("Falling back to placeholder robot...");
+                    this.createPlaceholderRobot();
+                }
+            }
+
+            async createSO101Robot() {
+                // Create the robot group
+                this.robot = new THREE.Group();
+                this.robot.name = 'so101_robot';
+                
+                // SO-101 robot parts with real STL meshes and bright colors for visibility
+                const robotParts = [
+                    { 
+                        file: 'Base_SO101.stl', 
+                        color: 0xE0E0E0,  // Light grey - base/foundation
+                        position: [0, 0, 0],  // Base link at origin
+                        rotation: [0, 0, 0],  // Base orientation
+                        scale: 0.001,  // Scale down from mm to m
+                        joint: 'base_link',
+                        parent: null
+                    },
+                    { 
+                        file: 'sts3215_03a_v1.stl', 
+                        color: 0xFFFFFF,  // Pure white - shoulder motor (pan)
+                        position: [0, 0, 0.04],  // 4cm above base center
+                        rotation: [0, 0, 0],  // Upright motor
+                        scale: 0.001,  // Scale down
+                        joint: 'shoulder_pan',
+                        parent: 0  // Attached to base
+                    },
+                    { 
+                        file: 'Upper_arm_SO101.stl', 
+                        color: 0xE0E0E0,  // Light grey - upper arm (shoulder lift)
+                        position: [0, 0, 0.03],  // 3cm above motor
+                        rotation: [-Math.PI/2, 0, 0],  // Rotate to extend horizontally
+                        scale: 0.001,  // Scale down
+                        joint: 'shoulder_lift',
+                        parent: 1  // Attached to shoulder_pan
+                    },
+                    { 
+                        file: 'Under_arm_SO101.stl', 
+                        color: 0xFFFFFF,  // Pure white - lower arm (elbow flex)
+                        position: [0, 0.10, 0],  // 10cm forward from upper arm
+                        rotation: [0, 0, 0],  // Continue horizontal
+                        scale: 0.001,  // Scale down
+                        joint: 'elbow_flex',
+                        parent: 2  // Attached to upper arm
+                    },
+                    { 
+                        file: 'Wrist_Roll_SO101.stl', 
+                        color: 0xE0E0E0,  // Light grey - wrist (wrist flex)
+                        position: [0, 0.08, 0],  // 8cm forward from lower arm
+                        rotation: [0, 0, 0],  // Continue alignment
+                        scale: 0.001,  // Scale down
+                        joint: 'wrist_flex',
+                        parent: 3  // Attached to lower arm
+                    },
+                    { 
+                        file: 'Moving_Jaw_SO101.stl', 
+                        color: 0xFFFFFF,  // Pure white - gripper (final joint)
+                        position: [0, 0.05, 0],  // 5cm forward from wrist
+                        rotation: [0, 0, 0],  // End effector alignment
+                        scale: 0.001,  // Scale down
+                        joint: 'gripper',
+                        parent: 4  // Attached to wrist
+                    },
+                ];
+                
+                // Load STL files and create proper kinematic chain
+                const stlLoader = new THREE.STLLoader();
+                this.robotMeshes = [];
+                this.jointObjects = [];
+                
+                // First pass: create all joint groups
+                for (let i = 0; i < robotParts.length; i++) {
+                    const jointGroup = new THREE.Group();
+                    jointGroup.name = robotParts[i].joint;
+                    jointGroup.userData = { 
+                        jointIndex: i, 
+                        originalPosition: [...robotParts[i].position],
+                        partInfo: robotParts[i]
+                    };
+                    this.jointObjects.push(jointGroup);
+                }
+                
+                // Second pass: load meshes and build hierarchy
+                for (let i = 0; i < robotParts.length; i++) {
+                    const part = robotParts[i];
+                    try {
+                        console.log(`Loading ${part.file}...`);
+                        const geometry = await this.loadSTLFile(stlLoader, part.file);
+                        
+                        // Create metallic material for modern look
+                        const material = new THREE.MeshStandardMaterial({ 
+                            color: part.color,
+                            metalness: 0.8,
+                            roughness: 0.3,
+                            side: THREE.DoubleSide
+                        });
+                        
+                        // Create mesh
+                        const mesh = new THREE.Mesh(geometry, material);
+                        mesh.castShadow = true;
+                        mesh.receiveShadow = true;
+                        mesh.scale.setScalar(part.scale);
+                        mesh.rotation.set(...part.rotation);
+                        mesh.name = part.joint;
+                        
+                        // Add to joint group
+                        const jointGroup = this.jointObjects[i];
+                        jointGroup.add(mesh);
+                        
+                        // Build hierarchy
+                        if (part.parent !== null) {
+                            const parentJoint = this.jointObjects[part.parent];
+                            parentJoint.add(jointGroup);
+                            jointGroup.position.set(...part.position);
+                        } else {
+                            // Root link
+                            this.robot.add(jointGroup);
+                            jointGroup.position.set(...part.position);
+                        }
+                        
+                        this.robotMeshes.push(mesh);
+                        console.log(`✅ Loaded ${part.file}`);
+                        
+                    } catch (error) {
+                        console.error(`❌ Failed to load ${part.file}:`, error);
+                        // Create fallback cube
+                        const fallbackGeometry = new THREE.BoxGeometry(0.05, 0.05, 0.05);
+                        const fallbackMaterial = new THREE.MeshStandardMaterial({ color: part.color });
+                        const fallbackMesh = new THREE.Mesh(fallbackGeometry, fallbackMaterial);
+                        fallbackMesh.name = part.joint + '_fallback';
+                        
+                        const jointGroup = this.jointObjects[i];
+                        jointGroup.add(fallbackMesh);
+                        
+                        if (part.parent !== null) {
+                            const parentJoint = this.jointObjects[part.parent];
+                            parentJoint.add(jointGroup);
+                            jointGroup.position.set(...part.position);
+                        } else {
+                            this.robot.add(jointGroup);
+                            jointGroup.position.set(...part.position);
+                        }
+                    }
+                }
+                
+                // Add to scene
+                this.scene.add(this.robot);
+                console.log("✅ SO-101 robot loaded successfully!");
+                
+                // Set up joint control event listeners
+                this.setupJointControls();
+            }
+
+            loadSTLFile(loader, filename) {
+                return new Promise((resolve, reject) => {
+                    const url = `/api/assets/robot/so101/${filename}`;
+                    console.log(`Loading STL from: ${url}`);
+                    
+                    loader.load(
+                        url,
+                        (geometry) => {
+                            console.log(`✅ STL loaded: ${filename}`);
+                            resolve(geometry);
+                        },
+                        (progress) => {
+                            console.log(`Loading progress for ${filename}:`, progress);
+                        },
+                        (error) => {
+                            console.error(`❌ STL load error for ${filename}:`, error);
+                            reject(error);
+                        }
+                    );
+                });
+            }
+
+            setupJointControls() {
+                // Set up event listeners for joint sliders
+                for (let i = 0; i < 6; i++) {
+                    const slider = document.getElementById(`jointSlider${i}`);
+                    if (slider) {
+                        slider.addEventListener('input', (e) => {
+                            const angle = parseFloat(e.target.value);
+                            this.updateJointAngle(i, angle);
+                        });
+                    }
+                }
+            }
+
+            updateJointAngle(jointIndex, angleDegrees) {
+                const angleRadians = (angleDegrees * Math.PI) / 180;
+                this.jointAngles[jointIndex] = angleRadians;
+                
+                // Update joint display
+                const jointDisplay = document.getElementById(`joint${jointIndex}`);
+                if (jointDisplay) {
+                    jointDisplay.textContent = `${angleDegrees.toFixed(1)}°`;
+                }
+                
+                // Apply rotation to robot
+                this.updateRobotVisualization();
+            }
+
+            updateRobotVisualization() {
+                if (!this.jointObjects || this.jointObjects.length === 0) return;
+                
+                // Apply joint rotations in proper sequence
+                try {
+                    // Base rotation (Y-axis)
+                    if (this.jointObjects[0]) {
+                        this.jointObjects[0].rotation.y = this.jointAngles[0];
+                    }
+                    
+                    // Shoulder pan (Z-axis)
+                    if (this.jointObjects[1]) {
+                        this.jointObjects[1].rotation.z = this.jointAngles[1];
+                    }
+                    
+                    // Shoulder lift (X-axis for horizontal motion)
+                    if (this.jointObjects[2]) {
+                        this.jointObjects[2].rotation.x = this.jointAngles[2];
+                    }
+                    
+                    // Elbow flex (X-axis)
+                    if (this.jointObjects[3]) {
+                        this.jointObjects[3].rotation.x = this.jointAngles[3];
+                    }
+                    
+                    // Wrist flex (X-axis)
+                    if (this.jointObjects[4]) {
+                        this.jointObjects[4].rotation.x = this.jointAngles[4];
+                    }
+                    
+                    // Gripper (Z-axis)
+                    if (this.jointObjects[5]) {
+                        this.jointObjects[5].rotation.z = this.jointAngles[5];
+                    }
+                } catch (error) {
+                    console.error("Error updating robot visualization:", error);
                 }
             }
             
-            setupLighting() {
-                // Clean, professional lighting setup
+            createPlaceholderRobot() {
+                console.log("Creating placeholder robot...");
                 
-                // Soft ambient light for overall illumination
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                // Create the robot group
+                this.robot = new THREE.Group();
+                this.robot.name = 'so101_placeholder';
+                
+                // Super bright placeholder cubes for maximum visibility
+                const robotParts = [
+                    { name: 'base_link', color: 0xE0E0E0, position: [0, 0, 0], size: [0.08, 0.08, 0.03] },
+                    { name: 'shoulder_pan', color: 0xFFFFFF, position: [0, 0, 0.04], size: [0.05, 0.05, 0.06] },
+                    { name: 'shoulder_lift', color: 0xE0E0E0, position: [0, 0, 0.03], size: [0.04, 0.10, 0.04] },
+                    { name: 'elbow_flex', color: 0xFFFFFF, position: [0, 0.10, 0], size: [0.04, 0.08, 0.04] },
+                    { name: 'wrist_flex', color: 0xE0E0E0, position: [0, 0.08, 0], size: [0.03, 0.05, 0.03] },
+                    { name: 'gripper', color: 0xFFFFFF, position: [0, 0.05, 0], size: [0.03, 0.04, 0.03] }
+                ];
+                
+                this.robotMeshes = [];
+                this.jointObjects = [];
+                
+                // Create joint groups first
+                for (let i = 0; i < robotParts.length; i++) {
+                    const jointGroup = new THREE.Group();
+                    jointGroup.name = robotParts[i].name;
+                    jointGroup.userData = { jointIndex: i };
+                    this.jointObjects.push(jointGroup);
+                }
+                
+                // Create meshes and build hierarchy
+                for (let i = 0; i < robotParts.length; i++) {
+                    const part = robotParts[i];
+                    
+                    // Create cube geometry with metallic material
+                    const geometry = new THREE.BoxGeometry(...part.size);
+                    const material = new THREE.MeshStandardMaterial({ 
+                        color: part.color,
+                        metalness: 0.8,
+                        roughness: 0.3
+                    });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+                    mesh.name = part.name;
+                    
+                    // Add to joint group
+                    const jointGroup = this.jointObjects[i];
+                    jointGroup.add(mesh);
+                    
+                    // Build hierarchy
+                    if (i > 0) {
+                        // Child of previous joint
+                        const parentJoint = this.jointObjects[i - 1];
+                        parentJoint.add(jointGroup);
+                        jointGroup.position.set(...part.position);
+                    } else {
+                        // Root link
+                        this.robot.add(jointGroup);
+                        jointGroup.position.set(...part.position);
+                    }
+                    
+                    this.robotMeshes.push(mesh);
+                }
+                
+                // Add to scene
+                this.scene.add(this.robot);
+                console.log("✅ Placeholder robot created!");
+                
+                // Set up joint controls
+                this.setupJointControls();
+            }
+            
+            addRobotPhysics() {
+                // Physics not implemented for SO-101 robot yet
+                console.log("Robot physics not implemented for STL-based robot");
+            }
+            
+            setupLighting() {
+                // Modern, professional lighting setup for robot visualization
+                
+                // Bright ambient light for excellent visibility
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
                 this.scene.add(ambientLight);
                 
-                // Main directional light (key light)
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                directionalLight.position.set(3, 4, 5);
+                // Strong directional light (key light) for sharp metallic details
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+                directionalLight.position.set(5, 8, 3);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
                 this.scene.add(directionalLight);
                 
-                // Fill light from opposite side
-                const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
-                fillLight.position.set(-2, -1, 3);
+                // Fill light from opposite side for even illumination
+                const fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
+                fillLight.position.set(-3, -2, 4);
                 this.scene.add(fillLight);
+                
+                // Rim light for modern industrial look
+                const rimLight = new THREE.DirectionalLight(0xffffff, 0.4);
+                rimLight.position.set(0, -5, 2);
+                this.scene.add(rimLight);
             }
             
             setupEnvironment() {
-                // Very minimal environment - just a subtle ground reference
+                // Minimal, clean environment for robot focus
                 
                 // Simple ground plane - very subtle
-                const groundGeometry = new THREE.PlaneGeometry(3, 3);
-                const groundMaterial = new THREE.MeshLambertMaterial({ 
-                    color: 0xffffff,
-                    transparent: true,
-                    opacity: 0.1
+                const groundGeometry = new THREE.PlaneGeometry(2, 2);
+                const groundMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0xf8f9fa,
+                    roughness: 0.8,
+                    metalness: 0.1
                 });
                 const ground = new THREE.Mesh(groundGeometry, groundMaterial);
                 ground.rotation.x = -Math.PI / 2;
-                ground.position.z = 0;
+                ground.position.z = -0.01;
+                ground.receiveShadow = true;
                 this.scene.add(ground);
                 
-                // Minimal grid - very subtle reference
-                const gridHelper = new THREE.GridHelper(1, 10, 0xe2e8f0, 0xf1f5f9);
-                gridHelper.rotation.x = Math.PI / 2;
-                gridHelper.position.z = 0.001;
+                // Clean grid reference
+                const gridHelper = new THREE.GridHelper(1, 20, 0xddd, 0xf0f0f0);
+                gridHelper.position.z = 0;
                 this.scene.add(gridHelper);
                 
-                // Small coordinate frame for reference
-                const axesHelper = new THREE.AxesHelper(0.15);
-                axesHelper.position.set(-0.4, -0.4, 0.01);
+                // Coordinate frame for reference
+                const axesHelper = new THREE.AxesHelper(0.2);
+                axesHelper.position.set(-0.5, -0.5, 0.01);
                 this.scene.add(axesHelper);
             }
             
             updateRobotPose(jointAngles) {
+                // Update joint angles and apply to robot
                 this.jointAngles = jointAngles;
-                
-                if (!this.robotParts.baseGroup) return;
-                
-                // Proper forward kinematics with joint hierarchy
-                const [j0, j1, j2, j3, j4, j5] = jointAngles.map(a => a * Math.PI / 180);
-                
-                // Joint 0: Base rotation (around Z-axis)
-                this.robotParts.baseGroup.rotation.z = j0;
-                
-                // Joint 1: Shoulder (around Y-axis, relative to base)
-                this.robotParts.link1Group.rotation.y = j1;
-                
-                // Joint 2: Elbow (around Y-axis, relative to upper arm)
-                this.robotParts.link2Group.rotation.y = j2;
-                
-                // Joint 3: Forearm twist (around X-axis, relative to forearm)
-                this.robotParts.link3Group.rotation.x = j3;
-                
-                // Joint 4: Wrist bend (around Y-axis, relative to forearm)
-                this.robotParts.wristGroup.rotation.y = j4;
-                
-                // Joint 5: Wrist twist (around X-axis, relative to wrist)
-                this.robotParts.wristGroup.rotation.x += j5; // Additive for compound rotation
+                this.updateRobotVisualization();
             }
             
             updateGripperState(isOpen) {
-                if (!this.robotParts.finger1 || !this.robotParts.finger2) return;
-                
-                const offset = isOpen ? 0.015 : 0.005;
-                this.robotParts.finger1.position.y = offset;
-                this.robotParts.finger2.position.y = -offset;
+                // For SO-101, gripper control is handled via joint slider
+                const gripperAngle = isOpen ? 30 : 0; // degrees
+                if (this.jointObjects && this.jointObjects[5]) {
+                    this.jointObjects[5].rotation.z = (gripperAngle * Math.PI) / 180;
+                }
             }
             
             addObject(type = 'cube', position = { x: 0.4, y: 0, z: 0.1 }) {

@@ -235,19 +235,147 @@
 <body class="bg-slate-900 text-white">
     <!-- Header -->
     <div class="bg-slate-800 border-b border-slate-700 px-6 py-4">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
             <div>
-                <h1 class="text-2xl font-bold text-white">SO-101 Robot Simulation</h1>
-                <p class="text-slate-400">Real-time robot control and visualization</p>
+                <h1 class="text-2xl font-bold text-white">Hand Teleop System</h1>
+                <p class="text-slate-400">Control robots with natural hand movements</p>
             </div>
-            <div class="flex items-center space-x-4">
-                <div class="flex items-center">
-                    <span id="connection-status" class="status-dot status-loading"></span>
-                    <span id="connection-text" class="text-sm">Connecting...</span>
+            <div class="flex flex-col md:flex-row md:items-center gap-2">
+                <div class="flex items-center gap-2">
+                    <span id="connection-status" class="status-dot status-disconnected"></span>
+                    <span id="connection-text" class="text-sm">Robot Disconnected</span>
                 </div>
                 <div class="text-sm">
                     <div>FPS: <span id="fps-display" class="font-mono">0</span></div>
                     <div>Latency: <span id="latency-display" class="font-mono">0ms</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Layout -->
+    <div class="flex flex-col md:flex-row h-[calc(100vh-80px)]">
+        <!-- Left: Robot and Controls -->
+        <div class="flex-1 flex flex-col">
+            <!-- Robot Embodiment Card -->
+            <div class="bg-slate-800 rounded-b-lg shadow-lg p-4 mb-2 flex flex-col md:flex-row md:items-center md:justify-between">
+                <div class="flex flex-col gap-1">
+                    <span class="uppercase text-xs text-slate-400 tracking-widest">Robot Embodiment</span>
+                    <span class="text-lg font-semibold text-white">UR5e (6 DOF)</span>
+                    <span class="text-slate-400 text-xs">Connect robot to view 3D model</span>
+                </div>
+                <div class="flex gap-2 mt-2 md:mt-0">
+                    <button class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition">Connect</button>
+                    <button class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition">Start Control</button>
+                </div>
+            </div>
+
+            <!-- 3D Viewport and Controls (existing) -->
+            <div class="flex-1 flex">
+                <!-- 3D Viewport -->
+                <div id="canvas-container" class="flex-1 relative">
+                    <canvas id="robot-canvas" class="w-full h-full"></canvas>
+                    <!-- Loading Overlay -->
+                    <div id="loading-overlay" class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                        <div class="text-center">
+                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                            <p class="text-lg">Loading SO-101 Robot...</p>
+                            <p id="loading-status" class="text-sm text-slate-400">Initializing...</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Control Panel -->
+                <div id="controls" class="w-80 p-6 overflow-y-auto bg-slate-900 border-l border-slate-800">
+                    <h3 class="text-lg font-semibold mb-4">Joint Controls</h3>
+                    <div id="joint-controls" class="space-y-4"></div>
+                    <hr class="border-slate-600 my-6">
+                    <h3 class="text-lg font-semibold mb-4">Robot Information</h3>
+                    <div id="robot-info" class="space-y-2 text-sm">
+                        <div>Model: <span class="text-blue-400">SO-101</span></div>
+                        <div>DOF: <span id="dof-display" class="text-blue-400">6</span></div>
+                        <div>Status: <span id="robot-status" class="text-green-400">Ready</span></div>
+                    </div>
+                    <hr class="border-slate-600 my-6">
+                    <h3 class="text-lg font-semibold mb-4">Demo Controls</h3>
+                    <div class="space-y-3">
+                        <button id="home-position" class="w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded transition">Home Position</button>
+                        <button id="demo-motion" class="w-full bg-green-600 hover:bg-green-700 px-4 py-2 rounded transition">Demo Motion</button>
+                        <button id="random-motion" class="w-full bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded transition">Random Motion</button>
+                        <button id="reset-robot" class="w-full bg-red-600 hover:bg-red-700 px-4 py-2 rounded transition">Reset Robot</button>
+                    </div>
+                    <hr class="border-slate-600 my-6">
+                    <h3 class="text-lg font-semibold mb-4">Debug Info</h3>
+                    <div id="debug-info" class="text-xs space-y-1 font-mono text-slate-400">
+                        <div>Messages: <span id="msg-count">0</span></div>
+                        <div>Last Update: <span id="last-update">Never</span></div>
+                        <div>WebSocket: <span id="ws-status">Disconnected</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Camera Feed Card -->
+            <div class="bg-slate-800 rounded-lg shadow-lg p-4 mt-2 flex flex-col md:flex-row md:items-center md:justify-between">
+                <div class="flex flex-col gap-1 flex-1">
+                    <span class="uppercase text-xs text-slate-400 tracking-widest">Camera Feed</span>
+                    <span class="text-lg font-semibold text-white">Inactive</span>
+                    <span class="text-slate-400 text-xs">Camera feed will appear here</span>
+                </div>
+                <div class="flex gap-2 mt-2 md:mt-0">
+                    <button class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition">Start Camera</button>
+                    <button class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition">Stop</button>
+                </div>
+            </div>
+            <div class="bg-slate-900 text-slate-400 text-center py-2 text-xs">Grant camera access to start</div>
+        </div>
+
+        <!-- Right: Analytics & Debug (foldable) -->
+        <div class="w-full md:w-[420px] flex-shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col">
+            <button id="analytics-toggle" class="w-full px-6 py-4 bg-slate-800 hover:bg-slate-700 transition-colors flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    <h3 class="text-lg font-semibold text-white">Analytics & Debug Info</h3>
+                </div>
+                <svg id="analytics-chevron" class="w-5 h-5 text-slate-400 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            <div id="analytics-content" class="flex-1 overflow-y-auto p-6 space-y-6">
+                <!-- Hand Tracking Model -->
+                <div>
+                    <div class="uppercase text-xs text-slate-400 mb-1">Hand Tracking Model</div>
+                    <div class="flex gap-2 mb-2">
+                        <button class="bg-blue-600 text-white px-3 py-1 rounded text-xs">MediaPipe Hands</button>
+                    </div>
+                    <div class="text-slate-300 text-sm">Hand Tracking: <span class="text-yellow-400">No hand detected</span></div>
+                </div>
+                <!-- Robot Joints -->
+                <div>
+                    <div class="uppercase text-xs text-slate-400 mb-1">Robot Joints</div>
+                    <div class="grid grid-cols-2 gap-2 text-slate-200 text-sm">
+                        <div>J1: <span id="joint-analytics-0">0.000</span> rad</div>
+                        <div>J2: <span id="joint-analytics-1">0.000</span> rad</div>
+                        <div>J3: <span id="joint-analytics-2">0.000</span> rad</div>
+                        <div>J4: <span id="joint-analytics-3">0.000</span> rad</div>
+                        <div>J5: <span id="joint-analytics-4">0.000</span> rad</div>
+                        <div>J6: <span id="joint-analytics-5">0.000</span> rad</div>
+                    </div>
+                </div>
+                <!-- API Status -->
+                <div>
+                    <div class="uppercase text-xs text-slate-400 mb-1">API Status</div>
+                    <div class="flex items-center gap-2 text-green-400 text-sm"><span>✅</span>Connected</div>
+                    <a href="#" class="text-blue-400 text-xs underline mt-1 inline-block">API Docs</a>
+                </div>
+                <!-- Output Console -->
+                <div>
+                    <div class="uppercase text-xs text-slate-400 mb-1">Output Console</div>
+                    <div class="bg-slate-800 rounded p-2 text-xs text-slate-200 h-24 overflow-y-auto" id="output-console">
+                        [3:19:57 PM] Backend API connected successfully
+                    </div>
+                    <button class="mt-2 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded text-xs" onclick="document.getElementById('output-console').textContent=''">Clear</button>
+                </div>
+                <!-- Demo & GitHub -->
+                <div class="flex gap-2 mt-4">
+                    <button class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition flex-1">Full Demo</button>
+                    <a href="https://github.com/" target="_blank" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded transition flex-1 text-center">GitHub</a>
                 </div>
             </div>
         </div>
@@ -320,6 +448,18 @@
     </div>
 
     <script>
+        // Analytics panel fold/unfold
+        document.addEventListener('DOMContentLoaded', () => {
+            const toggle = document.getElementById('analytics-toggle');
+            const content = document.getElementById('analytics-content');
+            const chevron = document.getElementById('analytics-chevron');
+            if (toggle && content && chevron) {
+                toggle.addEventListener('click', () => {
+                    content.classList.toggle('hidden');
+                    chevron.style.transform = content.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+                });
+            }
+        });
         // SO-101 Robot Simulation Controller
         class SO101Simulation {
             constructor() {
