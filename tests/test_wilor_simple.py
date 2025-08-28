@@ -4,7 +4,7 @@ Simple WiLoR test - takes one photo and shows hand pose estimation with visualiz
 """
 import cv2
 import numpy as np
-from hand_teleop.hand_pose.factory import create_estimator
+from core.hand_pose.factory import create_estimator
 
 def main():
     print("🤖 Simple WiLoR Hand Pose Test with Visualization")

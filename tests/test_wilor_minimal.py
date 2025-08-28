@@ -4,7 +4,7 @@ Minimal WiLoR test - lightweight version to avoid crashes
 """
 import cv2
 import numpy as np
-from hand_teleop.hand_pose.factory import create_estimator
+from core.hand_pose.factory import create_estimator
 import sys
 
 def main():

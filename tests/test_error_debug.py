@@ -22,7 +22,7 @@ def test_minimal_error():
         print("✅ Test image created")
         
         # Load WiLoR
-        from hand_teleop.hand_pose.factory import create_estimator
+        from core.hand_pose.factory import create_estimator
         estimator = create_estimator("wilor")
         print("✅ WiLoR loaded")
         

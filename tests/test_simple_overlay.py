@@ -24,7 +24,7 @@ def main():
     
     print("🧠 2) Loading WiLoR (this may take 30 seconds)...")
     try:
-        from hand_teleop.hand_pose.factory import create_estimator
+        from core.hand_pose.factory import create_estimator
         estimator = create_estimator("wilor")
         print("✅ WiLoR loaded")
     except Exception as e:

@@ -7,8 +7,8 @@ import time
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
-from hand_teleop.gripper_pose.gripper_pose import GripperPose
-from hand_teleop.tracking.tracker import HandTracker
+from core.robot_control.gripper_pose import GripperPose
+from core.tracking.tracker import HandTracker
 
 # SO-101 specific safe operating ranges (adjust based on your robot)
 SO101_SAFE_RANGE = {

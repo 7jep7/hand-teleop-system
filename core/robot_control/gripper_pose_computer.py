@@ -5,12 +5,12 @@ from typing import Literal, Optional
 import cv2
 import numpy as np
 
-from hand_teleop.gripper_pose.gripper_pose import GripperPose
-from hand_teleop.hand_pose.factory import (
+from core.robot_control.gripper_pose import GripperPose
+from core.hand_pose.factory import (
     ModelName,
     create_estimator,
 )
-from hand_teleop.hand_pose.types import TrackedHandKeypoints
+from core.hand_pose.types import TrackedHandKeypoints
 
 
 def normalize(v: np.ndarray) -> np.ndarray:
