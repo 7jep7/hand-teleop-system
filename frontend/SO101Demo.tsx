@@ -12,10 +12,10 @@ declare global {
 const API_CONFIG = {
   // Auto-detect backend URL based on current environment
   BACKEND_URL: (typeof window !== 'undefined' && window.location.hostname === 'localhost') 
-                ? 'http://localhost:8001' 
+                ? 'http://localhost:8000' 
                 : 'https://hand-teleop-system.onrender.com',
   WS_URL: (typeof window !== 'undefined' && window.location.hostname === 'localhost')
-           ? 'ws://localhost:8001'
+           ? 'ws://localhost:8000'
            : 'wss://hand-teleop-system.onrender.com',
   RECONNECT_INTERVAL: 3000,
   PING_INTERVAL: 30000,

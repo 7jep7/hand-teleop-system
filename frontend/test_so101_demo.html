@@ -32,9 +32,853 @@
 <body>
     <div id="root"></div>
 
-    <script type="text/babel" src="SO101Demo.tsx"></script>
-    
     <script type="text/babel">
+        // Inline React component - embedded SO101Demo
+        function SO101Demo() {
+            const canvasRef = React.useRef(null);
+            const containerRef = React.useRef(null);
+            const wsRef = React.useRef(null);
+            const reconnectTimeoutRef = React.useRef(null);
+            const pingIntervalRef = React.useRef(null);
+            
+            // State
+            const [jointPositions, setJointPositions] = React.useState(() => {
+                const config = JOINT_CONFIGS['so101'];
+                return new Array(config.names.length).fill(0);
+            });
+            const [selectedRobot, setSelectedRobot] = React.useState('so101');
+
+            // Update joint positions when robot changes
+            React.useEffect(() => {
+                const config = getCurrentRobotConfig();
+                setJointPositions(new Array(config.names.length).fill(0));
+            }, [selectedRobot]);
+            const [isConnected, setIsConnected] = React.useState(false);
+            const [isTracking, setIsTracking] = React.useState(false);
+            const [fps, setFps] = React.useState(0);
+            const [latency, setLatency] = React.useState(0);
+            const [messageCount, setMessageCount] = React.useState(0);
+            const [wsStatus, setWsStatus] = React.useState("Disconnected");
+            const [showAnalytics, setShowAnalytics] = React.useState(true);
+            const [consoleLogs, setConsoleLogs] = React.useState([
+                "SO-101 Demo initialized",
+                "Ready for robot connection"
+            ]);
+            const [cameraActive, setCameraActive] = React.useState(false);
+            const [handDetected, setHandDetected] = React.useState(false);
+
+            // Refs for camera
+            const videoRef = React.useRef(null);
+            const overlayRef = React.useRef(null);
+
+            // API Configuration
+            const API_CONFIG = {
+                BACKEND_URL: 'http://localhost:8000',
+                WS_URL: 'ws://localhost:8000',
+                RECONNECT_INTERVAL: 3000,
+                PING_INTERVAL: 30000,
+                REQUEST_TIMEOUT: 10000
+            };
+
+                        // Joint configurations for different robots
+            const JOINT_CONFIGS = {
+                'ur5e': {
+                    names: ['Base', 'Shoulder', 'Elbow', 'Wrist 1', 'Wrist 2', 'Wrist 3'],
+                    limits: [[-360, 360], [-360, 360], [-180, 180], [-360, 360], [-360, 360], [-360, 360]]
+                },
+                'franka': {
+                    names: ['Joint 1', 'Joint 2', 'Joint 3', 'Joint 4', 'Joint 5', 'Joint 6', 'Joint 7'],
+                    limits: [[-166, 166], [-101, 101], [-166, 166], [-176, -4], [-166, 166], [-1, 215], [-166, 166]]
+                },
+                'kinova': {
+                    names: ['Base', 'Shoulder', 'Arm', 'Elbow', 'Wrist 1', 'Wrist 2', 'Hand'],
+                    limits: [[-360, 360], [-128.9, 128.9], [-147.8, 147.8], [-360, 360], [-120.3, 120.3], [-360, 360], [-360, 360]]
+                },
+                'kuka': {
+                    names: ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'],
+                    limits: [[-170, 170], [-120, 120], [-170, 170], [-120, 120], [-170, 170], [-120, 120], [-175, 175]]
+                },
+                'so101': {
+                    names: ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'],
+                    limits: [[0, 90], [0, 90], [0, 90], [0, 90], [0, 90]]
+                },
+                'simulation': {
+                    names: ['Joint 1', 'Joint 2', 'Joint 3', 'Joint 4', 'Joint 5', 'Joint 6'],
+                    limits: [[-180, 180], [-180, 180], [-180, 180], [-180, 180], [-180, 180], [-180, 180]]
+                }
+            };
+
+            // Get current robot configuration
+            const getCurrentRobotConfig = () => {
+                return JOINT_CONFIGS[selectedRobot] || JOINT_CONFIGS['simulation'];
+            };
+            // Robot configurations
+            const ROBOTS = [
+                { id: 'ur5e', name: 'UR5e', dof: 6, description: 'Universal Robots collaborative arm for precise manipulation' },
+                { id: 'franka', name: 'Franka Emika Panda', dof: 7, description: 'Research robot with torque sensors in every joint' },
+                { id: 'kinova', name: 'Kinova Gen3', dof: 7, description: 'Lightweight carbon fiber arm for research applications' },
+                { id: 'kuka', name: 'KUKA LBR iiwa', dof: 7, description: 'Sensitive lightweight robot for human-robot collaboration' },
+                { id: 'so101', name: 'SO-101 Humanoid Hand', dof: 5, description: 'Dexterous robotic hand' },
+                { id: 'simulation', name: 'Simulation Mode', dof: 6, description: 'Virtual robot for testing' }
+            ];
+
+            // Helper to add console logs
+            const addToConsole = React.useCallback((message) => {
+                const timestamp = new Date().toLocaleTimeString();
+                setConsoleLogs(prev => [`[${timestamp}] ${message}`, ...prev].slice(0, 20));
+            }, []);
+
+            // Event handlers
+            const handleSlider = (i, value) => {
+                const newJoints = [...jointPositions];
+                newJoints[i] = value;
+                setJointPositions(newJoints);
+                addToConsole(`Joint ${i + 1} moved to ${value.toFixed(2)} rad`);
+            };
+
+            const connectToRobot = () => {
+                setIsConnected(!isConnected);
+                addToConsole(isConnected ? "Robot disconnected" : "Robot connected");
+            };
+
+            const resetRobot = () => {
+                setJointPositions([0, 0, 0, 0, 0, 0]);
+                addToConsole("Robot reset to home position");
+            };
+
+            const clearConsole = () => {
+                setConsoleLogs([]);
+            };
+
+            // Camera initialization
+            const initCamera = React.useCallback(async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { width: 640, height: 480 } 
+                    });
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                        setCameraActive(true);
+                        addToConsole("Camera initialized successfully");
+                    }
+                } catch (error) {
+                    addToConsole(`Camera access denied: ${error.message}`);
+                    setCameraActive(false);
+                }
+            }, [addToConsole]);
+
+            // Hand tracking processing
+            const processHandTracking = React.useCallback(async () => {
+                if (!isTracking || !videoRef.current || !overlayRef.current) return;
+
+                const video = videoRef.current;
+                const canvas = overlayRef.current;
+                const ctx = canvas.getContext('2d');
+
+                // Clear previous drawings
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Create a temporary canvas for frame capture
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = video.videoWidth;
+                tempCanvas.height = video.videoHeight;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(video, 0, 0);
+
+                // Convert to base64 for API
+                const imageData = tempCanvas.toDataURL('image/jpeg', 0.8);
+
+                try {
+                    const response = await fetch(`${API_CONFIG.BACKEND_URL}/api/tracking/hand`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image_data: imageData.split(',')[1],
+                            robot_type: selectedRobot,
+                            tracking_mode: 'wilor'
+                        })
+                    });
+
+                    const result = await response.json();
+                    setMessageCount(prev => prev + 1);
+
+                    if (result.success && result.hand_detected) {
+                        setHandDetected(true);
+                        
+                        // Draw hand landmarks
+                        if (result.hand_pose && result.hand_pose.landmarks) {
+                            const landmarks = result.hand_pose.landmarks;
+                            
+                            // Draw finger traces
+                            ctx.strokeStyle = '#f97316'; // Orange
+                            ctx.lineWidth = 2;
+                            ctx.fillStyle = '#f97316';
+
+                            // Draw connections between landmarks (simplified finger lines)
+                            const fingerConnections = [
+                                [0, 1, 2, 3, 4], // Thumb
+                                [0, 5, 6, 7, 8], // Index
+                                [0, 9, 10, 11, 12], // Middle
+                                [0, 13, 14, 15, 16], // Ring
+                                [0, 17, 18, 19, 20] // Pinky
+                            ];
+
+                            fingerConnections.forEach(finger => {
+                                ctx.beginPath();
+                                finger.forEach((pointIndex, i) => {
+                                    if (pointIndex < landmarks.length) {
+                                        const point = landmarks[pointIndex];
+                                        const x = point.x * canvas.width;
+                                        const y = point.y * canvas.height;
+                                        
+                                        if (i === 0) {
+                                            ctx.moveTo(x, y);
+                                        } else {
+                                            ctx.lineTo(x, y);
+                                        }
+                                    }
+                                });
+                                ctx.stroke();
+                            });
+
+                            // Draw landmark points
+                            landmarks.forEach((point, index) => {
+                                const x = point.x * canvas.width;
+                                const y = point.y * canvas.height;
+                                
+                                ctx.beginPath();
+                                ctx.arc(x, y, index === 0 ? 6 : 4, 0, 2 * Math.PI);
+                                ctx.fill();
+                                
+                                // Label key points
+                                if ([0, 4, 8, 12, 16, 20].includes(index)) {
+                                    ctx.fillStyle = '#ffffff';
+                                    ctx.font = '10px monospace';
+                                    ctx.fillText(index, x + 8, y - 8);
+                                    ctx.fillStyle = '#f97316';
+                                }
+                            });
+                        }
+
+                        // Update robot joints if available
+                        if (result.robot_joints && result.robot_joints.length === 6) {
+                            setJointPositions(result.robot_joints);
+                        }
+
+                        // Update latency
+                        setLatency(result.processing_time_ms || 0);
+                        
+                        addToConsole(`Hand detected with ${result.hand_pose?.landmarks?.length || 0} landmarks`);
+                    } else {
+                        setHandDetected(false);
+                        addToConsole("No hand detected in frame");
+                    }
+                } catch (error) {
+                    addToConsole(`Hand tracking error: ${error.message}`);
+                    setHandDetected(false);
+                }
+            }, [isTracking, selectedRobot, API_CONFIG.BACKEND_URL, addToConsole]);
+
+            // Start/stop hand tracking
+            const toggleTracking = () => {
+                if (!cameraActive) {
+                    addToConsole("Cannot start tracking: camera not active");
+                    return;
+                }
+                
+                setIsTracking(!isTracking);
+                addToConsole(isTracking ? "Hand tracking stopped" : "Hand tracking started");
+            };
+
+            // Simple Three.js setup and camera initialization
+            React.useEffect(() => {
+                if (!canvasRef.current || !containerRef.current) return;
+
+                let scene, camera, renderer, cube;
+                
+                const init = () => {
+                    scene = new THREE.Scene();
+                    scene.background = new THREE.Color(0x1e293b);
+                    
+                    camera = new THREE.PerspectiveCamera(75, containerRef.current.clientWidth / containerRef.current.clientHeight, 0.1, 1000);
+                    camera.position.z = 5;
+                    
+                    renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true });
+                    renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+                    
+                    // Simple robot representation
+                    const geometry = new THREE.BoxGeometry(1, 1, 1);
+                    const material = new THREE.MeshBasicMaterial({ color: 0xff6600 });
+                    cube = new THREE.Mesh(geometry, material);
+                    scene.add(cube);
+                    
+                    addToConsole("3D visualization initialized");
+                };
+
+                const animate = () => {
+                    requestAnimationFrame(animate);
+                    if (cube) {
+                        cube.rotation.x += 0.01;
+                        cube.rotation.y += 0.01;
+                    }
+                    if (renderer && scene && camera) {
+                        renderer.render(scene, camera);
+                    }
+                    setFps(prev => prev < 60 ? prev + 1 : 60);
+                };
+
+                init();
+                animate();
+
+                // Initialize camera on component mount
+                initCamera();
+
+                return () => {
+                    if (renderer) {
+                        renderer.dispose();
+                    }
+                };
+            }, [addToConsole, initCamera]);
+
+            // Hand tracking loop
+            React.useEffect(() => {
+                let intervalId;
+                
+                if (isTracking) {
+                    intervalId = setInterval(processHandTracking, 100); // 10 FPS
+                }
+                
+                return () => {
+                    if (intervalId) {
+                        clearInterval(intervalId);
+                    }
+                };
+            }, [isTracking, processHandTracking]);
+
+            return React.createElement('div', {
+                className: "min-h-screen bg-gray-900 text-white"
+            }, [
+                // Header - Cleaner, more minimal
+                React.createElement('header', {
+                    key: 'header',
+                    className: "border-b border-gray-800"
+                }, React.createElement('div', {
+                    className: "max-w-7xl mx-auto px-6 py-6 flex justify-between items-center"
+                }, [
+                    React.createElement('div', {
+                        key: 'logo',
+                        className: "flex items-center space-x-4"
+                    }, [
+                        React.createElement('div', {
+                            key: 'avatar',
+                            className: "w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center"
+                        }, React.createElement('span', {
+                            className: "text-white font-bold text-sm"
+                        }, "JP")),
+                        React.createElement('div', { key: 'title' }, [
+                            React.createElement('h1', {
+                                key: 'h1',
+                                className: "text-2xl font-semibold text-white"
+                            }, "Hand Teleop System"),
+                            React.createElement('p', {
+                                key: 'subtitle',
+                                className: "text-sm text-gray-400"
+                            }, "Control robots with natural hand movements")
+                        ])
+                    ]),
+                    React.createElement('button', {
+                        key: 'back-button',
+                        className: "flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm"
+                    }, [
+                        React.createElement('span', { key: 'arrow' }, "←"),
+                        "Back to Home"
+                    ])
+                ])),
+
+                // Main Content - Cleaner layout
+                React.createElement('div', {
+                    key: 'main',
+                    className: "max-w-7xl mx-auto px-6 py-8"
+                }, [
+                    // Two-column grid with cleaner cards
+                    React.createElement('div', {
+                        key: 'grid',
+                        className: "grid grid-cols-1 lg:grid-cols-2 gap-6"
+                    }, [
+                        // Robot Panel - Cleaner styling
+                        React.createElement('div', {
+                            key: 'robot-panel',
+                            className: "bg-gray-800/50 rounded-xl border border-gray-700/50 p-6"
+                        }, [
+                            React.createElement('div', {
+                                key: 'robot-header',
+                                className: "flex items-center justify-between mb-6"
+                            }, [
+                                React.createElement('div', {
+                                    key: 'robot-title-section',
+                                    className: "flex items-center gap-3"
+                                }, [
+                                    React.createElement('div', {
+                                        key: 'robot-icon',
+                                        className: "w-6 h-6 rounded-md bg-gray-700 flex items-center justify-center"
+                                    }, React.createElement('span', {
+                                        className: "text-xs"
+                                    }, "🤖")),
+                                    React.createElement('h2', {
+                                        key: 'robot-title',
+                                        className: "text-lg font-medium text-white"
+                                    }, "Robot")
+                                ]),
+                                React.createElement('span', {
+                                    key: 'robot-status',
+                                    className: `px-3 py-1 rounded-full text-xs font-medium ${
+                                        isConnected ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-gray-500/10 text-gray-400 border border-gray-500/20"
+                                    }`
+                                }, isConnected ? "Connected" : "Disconnected")
+                            ]),
+                            
+                            // Robot Embodiment Section
+                            React.createElement('div', {
+                                key: 'robot-embodiment',
+                                className: "mb-6"
+                            }, [
+                                React.createElement('label', {
+                                    key: 'embodiment-label',
+                                    className: "block text-sm font-medium text-gray-300 mb-3"
+                                }, "Robot Embodiment"),
+                                React.createElement('select', {
+                                    key: 'robot-select',
+                                    value: selectedRobot,
+                                    onChange: (e) => setSelectedRobot(e.target.value),
+                                    className: "w-full bg-gray-900/50 border border-gray-600 rounded-lg px-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                }, ROBOTS.map(robot => React.createElement('option', {
+                                    key: robot.id,
+                                    value: robot.id,
+                                    title: robot.description
+                                }, `${robot.name} (${robot.dof} DOF)`)))
+                            ]),
+
+                            // 3D Visualization Area - Much cleaner
+                            React.createElement('div', {
+                                key: 'robot-viz-container',
+                                ref: containerRef,
+                                className: "relative aspect-[4/3] bg-gray-900/30 rounded-lg border border-dashed border-gray-600 mb-6 overflow-hidden"
+                            }, [
+                                React.createElement('canvas', {
+                                    key: 'robot-canvas',
+                                    ref: canvasRef,
+                                    className: "w-full h-full"
+                                }),
+                                // Cleaner overlay
+                                !isConnected && React.createElement('div', {
+                                    key: 'robot-placeholder',
+                                    className: "absolute inset-0 flex flex-col items-center justify-center text-gray-500"
+                                }, [
+                                    React.createElement('div', {
+                                        key: 'monitor-icon',
+                                        className: "w-12 h-12 mb-4 bg-gray-700/50 rounded-lg flex items-center justify-center"
+                                    }, React.createElement('span', {
+                                        className: "text-xl"
+                                    }, "🖥️")),
+                                    React.createElement('p', {
+                                        key: 'placeholder-text',
+                                        className: "text-sm font-medium"
+                                    }, "Connect robot to view 3D model"),
+                                    React.createElement('p', {
+                                        key: 'placeholder-subtext',
+                                        className: "text-xs text-gray-600 mt-1"
+                                    }, "Real-time visualization will appear here")
+                                ])
+                            ]),
+
+                            // Cleaner action buttons
+                            React.createElement('div', {
+                                key: 'robot-actions',
+                                className: "flex gap-3"
+                            }, [
+                                React.createElement('button', {
+                                    key: 'connect-btn',
+                                    onClick: connectToRobot,
+                                    className: `flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                                        isConnected 
+                                            ? "bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20" 
+                                            : "bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20"
+                                    }`
+                                }, [
+                                    React.createElement('span', {
+                                        key: 'connect-icon',
+                                        className: "text-xs"
+                                    }, isConnected ? "⏸️" : "▶️"),
+                                    isConnected ? "Disconnect" : "Connect"
+                                ]),
+                                React.createElement('button', {
+                                    key: 'control-btn',
+                                    onClick: () => addToConsole("Start Control clicked"),
+                                    disabled: !isConnected,
+                                    className: `flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                                        isConnected 
+                                            ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20"
+                                            : "bg-gray-500/10 text-gray-500 border border-gray-500/20 cursor-not-allowed"
+                                    }`
+                                }, [
+                                    React.createElement('span', {
+                                        key: 'control-icon',
+                                        className: "text-xs"
+                                    }, "🎮"),
+                                    "Start Control"
+                                ])
+                            ])
+                        ]),
+
+                        // Camera Panel - Much cleaner styling
+                        React.createElement('div', {
+                            key: 'camera-panel',
+                            className: "bg-gray-800/50 rounded-xl border border-gray-700/50 p-6"
+                        }, [
+                            React.createElement('div', {
+                                key: 'camera-header',
+                                className: "flex items-center justify-between mb-6"
+                            }, [
+                                React.createElement('div', {
+                                    key: 'camera-title-section',
+                                    className: "flex items-center gap-3"
+                                }, [
+                                    React.createElement('div', {
+                                        key: 'camera-icon',
+                                        className: "w-6 h-6 rounded-md bg-gray-700 flex items-center justify-center"
+                                    }, React.createElement('span', {
+                                        className: "text-xs"
+                                    }, "📷")),
+                                    React.createElement('h2', {
+                                        key: 'camera-title',
+                                        className: "text-lg font-medium text-white"
+                                    }, "Camera Feed")
+                                ]),
+                                React.createElement('span', {
+                                    key: 'camera-status',
+                                    className: `px-3 py-1 rounded-full text-xs font-medium ${
+                                        handDetected ? "bg-green-500/10 text-green-400 border border-green-500/20" : 
+                                        cameraActive ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" : 
+                                        "bg-gray-500/10 text-gray-400 border border-gray-500/20"
+                                    }`
+                                }, handDetected ? "Hand Detected" : cameraActive ? "Active" : "Inactive")
+                            ]),
+
+                            // Camera feed area - Much cleaner
+                            React.createElement('div', {
+                                key: 'camera-container',
+                                className: "relative aspect-[4/3] bg-gray-900/30 rounded-lg border border-gray-600/50 mb-6 overflow-hidden"
+                            }, [
+                                React.createElement('video', {
+                                    key: 'video',
+                                    ref: videoRef,
+                                    autoPlay: true,
+                                    muted: true,
+                                    className: "w-full h-full object-cover"
+                                }),
+                                React.createElement('canvas', {
+                                    key: 'overlay',
+                                    ref: overlayRef,
+                                    width: 640,
+                                    height: 480,
+                                    className: "absolute top-0 left-0 w-full h-full pointer-events-none"
+                                }),
+                                !cameraActive && React.createElement('div', {
+                                    key: 'camera-placeholder',
+                                    className: "absolute inset-0 flex flex-col items-center justify-center text-gray-500"
+                                }, [
+                                    React.createElement('div', {
+                                        key: 'camera-icon-large',
+                                        className: "w-12 h-12 mb-4 bg-gray-700/50 rounded-lg flex items-center justify-center"
+                                    }, React.createElement('span', {
+                                        className: "text-xl"
+                                    }, "📷")),
+                                    React.createElement('p', {
+                                        key: 'camera-placeholder-text',
+                                        className: "text-sm font-medium"
+                                    }, "Camera feed will appear here"),
+                                    React.createElement('p', {
+                                        key: 'camera-placeholder-subtext',
+                                        className: "text-xs text-gray-600 mt-1"
+                                    }, "Grant camera access to start")
+                                ])
+                            ]),
+
+                            // Cleaner camera controls
+                            React.createElement('div', {
+                                key: 'camera-controls',
+                                className: "flex gap-3"
+                            }, [
+                                React.createElement('button', {
+                                    key: 'start-camera-btn',
+                                    onClick: initCamera,
+                                    className: "flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-all font-medium text-sm"
+                                }, [
+                                    React.createElement('span', {
+                                        key: 'camera-start-icon',
+                                        className: "text-xs"
+                                    }, cameraActive ? "🔄" : "📷"),
+                                    "Start Camera"
+                                ]),
+                                React.createElement('button', {
+                                    key: 'stop-btn',
+                                    onClick: () => addToConsole("Stop clicked"),
+                                    className: "px-6 py-2.5 rounded-lg bg-gray-600/20 text-gray-400 border border-gray-600/30 hover:bg-gray-600/30 transition-all font-medium text-sm"
+                                }, "Stop")
+                            ])
+                        ])
+                    ]),
+
+                    // Joint Controls
+                    React.createElement('div', {
+                        key: 'joint-controls',
+                        className: "mb-8"
+                    }, React.createElement('div', {
+                        className: "bg-gray-800 rounded-lg border border-gray-700 p-6"
+                    }, [
+                        React.createElement('h2', {
+                            key: 'joints-title',
+                            className: "text-lg font-semibold mb-4 text-orange-400"
+                        }, `Joint Controls (${getCurrentRobotConfig().names.length} DOF)`),
+                        React.createElement('div', {
+                            key: 'sliders',
+                            className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                        }, getCurrentRobotConfig().names.map((name, i) => React.createElement('div', {
+                            key: `${selectedRobot}-${i}`,
+                            className: "flex flex-col"
+                        }, [
+                            React.createElement('label', {
+                                key: 'label',
+                                className: "text-sm text-gray-300 font-medium mb-2"
+                            }, name),
+                            React.createElement('input', {
+                                key: 'slider',
+                                type: "range",
+                                min: getCurrentRobotConfig().limits[i][0],
+                                max: getCurrentRobotConfig().limits[i][1],
+                                step: 0.1,
+                                value: jointPositions[i] || 0,
+                                onChange: e => handleSlider(i, parseFloat(e.target.value)),
+                                className: "w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider-orange"
+                            }),
+                            React.createElement('span', {
+                                key: 'value',
+                                className: "text-xs text-orange-400 mt-1 text-center"
+                            }, `${(jointPositions[i] || 0).toFixed(1)}°`)
+                        ])))
+                    ])),
+
+                    // Analytics Panel
+                    React.createElement('div', {
+                        key: 'analytics',
+                        className: "mb-8"
+                    }, React.createElement('div', {
+                        className: "bg-gray-800 rounded-lg border border-gray-700 overflow-hidden"
+                    }, [
+                        React.createElement('button', {
+                            key: 'analytics-toggle',
+                            onClick: () => setShowAnalytics(!showAnalytics),
+                            className: "w-full p-4 text-left flex items-center justify-between hover:bg-gray-700/50 transition-colors"
+                        }, [
+                            React.createElement('h2', {
+                                key: 'analytics-title',
+                                className: "text-lg font-semibold text-white"
+                            }, "Analytics & Debug Info"),
+                            React.createElement('span', {
+                                key: 'toggle-icon',
+                                className: "text-orange-400 text-lg"
+                            }, showAnalytics ? "▲" : "▼")
+                        ]),
+                        showAnalytics && React.createElement('div', {
+                            key: 'analytics-content',
+                            className: "border-t border-gray-700 p-6"
+                        }, [
+                            React.createElement('div', {
+                                key: 'stats-grid',
+                                className: "grid md:grid-cols-2 gap-6 mb-6"
+                            }, [
+                                // System Stats
+                                React.createElement('div', {
+                                    key: 'system-stats'
+                                }, [
+                                    React.createElement('h3', {
+                                        key: 'system-title',
+                                        className: "font-medium mb-3 text-orange-400 flex items-center gap-2"
+                                    }, [
+                                        React.createElement('div', {
+                                            key: 'system-icon',
+                                            className: "w-3 h-3 bg-orange-500 rounded"
+                                        }),
+                                        "System Stats"
+                                    ]),
+                                    React.createElement('div', {
+                                        key: 'system-content',
+                                        className: "space-y-2 text-sm"
+                                    }, [
+                                        React.createElement('div', {
+                                            key: 'fps-stat',
+                                            className: "flex justify-between"
+                                        }, [
+                                            React.createElement('span', {
+                                                key: 'fps-label',
+                                                className: "text-gray-300"
+                                            }, "Rendering FPS:"),
+                                            React.createElement('span', {
+                                                key: 'fps-value',
+                                                className: "text-orange-400 font-mono"
+                                            }, fps)
+                                        ]),
+                                        React.createElement('div', {
+                                            key: 'camera-stat',
+                                            className: "flex justify-between"
+                                        }, [
+                                            React.createElement('span', {
+                                                key: 'camera-label',
+                                                className: "text-gray-300"
+                                            }, "Camera:"),
+                                            React.createElement('span', {
+                                                key: 'camera-value',
+                                                className: cameraActive ? "text-green-400" : "text-red-400"
+                                            }, cameraActive ? "Active" : "Inactive")
+                                        ]),
+                                        React.createElement('div', {
+                                            key: 'hand-stat',
+                                            className: "flex justify-between"
+                                        }, [
+                                            React.createElement('span', {
+                                                key: 'hand-label',
+                                                className: "text-gray-300"
+                                            }, "Hand Detection:"),
+                                            React.createElement('span', {
+                                                key: 'hand-value',
+                                                className: handDetected ? "text-green-400" : "text-gray-400"
+                                            }, handDetected ? "Detected" : "None")
+                                        ]),
+                                        React.createElement('div', {
+                                            key: 'latency-stat',
+                                            className: "flex justify-between"
+                                        }, [
+                                            React.createElement('span', {
+                                                key: 'latency-label',
+                                                className: "text-gray-300"
+                                            }, "Tracking Latency:"),
+                                            React.createElement('span', {
+                                                key: 'latency-value',
+                                                className: "text-yellow-400 font-mono"
+                                            }, `${latency.toFixed(0)}ms`)
+                                        ])
+                                    ])
+                                ]),
+
+                                // Tracking Info
+                                React.createElement('div', {
+                                    key: 'tracking-stats'
+                                }, [
+                                    React.createElement('h3', {
+                                        key: 'tracking-title',
+                                        className: "font-medium mb-3 text-orange-400 flex items-center gap-2"
+                                    }, [
+                                        React.createElement('div', {
+                                            key: 'tracking-icon',
+                                            className: "w-3 h-3 bg-orange-500 rounded"
+                                        }),
+                                        "Tracking Info"
+                                    ]),
+                                    React.createElement('div', {
+                                        key: 'tracking-content',
+                                        className: "space-y-2 text-sm"
+                                    }, [
+                                        React.createElement('div', {
+                                            key: 'tracking-stat',
+                                            className: "flex justify-between"
+                                        }, [
+                                            React.createElement('span', {
+                                                key: 'tracking-label',
+                                                className: "text-gray-300"
+                                            }, "Tracking:"),
+                                            React.createElement('span', {
+                                                key: 'tracking-value',
+                                                className: isTracking ? "text-green-400" : "text-gray-400"
+                                            }, isTracking ? "Active" : "Stopped")
+                                        ]),
+                                        React.createElement('div', {
+                                            key: 'messages-stat',
+                                            className: "flex justify-between"
+                                        }, [
+                                            React.createElement('span', {
+                                                key: 'messages-label',
+                                                className: "text-gray-300"
+                                            }, "API Messages:"),
+                                            React.createElement('span', {
+                                                key: 'messages-value',
+                                                className: "text-blue-400 font-mono"
+                                            }, messageCount)
+                                        ]),
+                                        React.createElement('div', {
+                                            key: 'robot-stat',
+                                            className: "flex justify-between"
+                                        }, [
+                                            React.createElement('span', {
+                                                key: 'robot-label',
+                                                className: "text-gray-300"
+                                            }, "Robot Type:"),
+                                            React.createElement('span', {
+                                                key: 'robot-value',
+                                                className: "text-purple-400"
+                                            }, selectedRobot.toUpperCase())
+                                        ]),
+                                        React.createElement('div', {
+                                            key: 'joints-stat',
+                                            className: "flex justify-between"
+                                        }, [
+                                            React.createElement('span', {
+                                                key: 'joints-label',
+                                                className: "text-gray-300"
+                                            }, "Active Joints:"),
+                                            React.createElement('span', {
+                                                key: 'joints-value',
+                                                className: "text-cyan-400"
+                                            }, jointPositions.filter(j => Math.abs(j || 0) > 0.01).length)
+                                        ])
+                                    ])
+                                ])
+                            ]),
+
+                            React.createElement('div', {
+                                key: 'console-header',
+                                className: "flex items-center justify-between mb-2"
+                            }, [
+                                React.createElement('h3', {
+                                    key: 'console-title',
+                                    className: "font-medium text-orange-400"
+                                }, "Console Output"),
+                                React.createElement('button', {
+                                    key: 'clear-console',
+                                    onClick: clearConsole,
+                                    className: "text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-1 rounded transition"
+                                }, "Clear")
+                            ]),
+                            React.createElement('div', {
+                                key: 'console',
+                                className: "bg-gray-900 border border-gray-600 rounded-lg p-3 h-32 overflow-y-auto"
+                            }, consoleLogs.length === 0 
+                                ? React.createElement('div', {
+                                    className: "text-gray-500 text-xs"
+                                }, "Console output will appear here...")
+                                : React.createElement('div', {
+                                    className: "text-xs font-mono space-y-1"
+                                }, consoleLogs.map((log, index) => React.createElement('div', {
+                                    key: index,
+                                    className: "text-gray-300"
+                                }, log)))
+                            )
+                        ])
+                    ]))
+                ])
+            ]);
+        }
+
+        // Render the component
         const { StrictMode } = React;
         const { createRoot } = ReactDOM;
 

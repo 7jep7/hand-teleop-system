@@ -1045,6 +1045,16 @@ async def get_web_interface():
     else:
         raise HTTPException(status_code=404, detail="SO-101 simulation interface not found")
 
+@app.get("/react-demo", response_class=FileResponse)
+async def get_react_demo():
+    """Serve the modern SO-101 React demo interface"""
+    import os
+    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "test_so101_demo.html")
+    if os.path.exists(frontend_path):
+        return FileResponse(frontend_path)
+    else:
+        raise HTTPException(status_code=404, detail="React demo interface not found")
+
 @app.get("/so101-simulation", response_class=FileResponse)
 async def get_so101_simulation():
     """Serve the SO-101 simulation interface (alternative route)"""
