@@ -42,7 +42,7 @@ else:
 echo ""
 echo "🌐 Starting development server..."
 echo "   API docs: http://localhost:8000/docs"
-echo "   Demo: http://localhost:8000/demo"
+echo "   React Demo: http://localhost:8000/react-demo"
 echo "   Health: http://localhost:8000/api/health"
 echo ""
 echo "Press Ctrl+C to stop"
