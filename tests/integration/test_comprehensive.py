@@ -64,7 +64,7 @@ class TestRunner:
             ("GET", "/api/health", None),
             ("GET", "/api/robots", None),
             ("GET", "/api/performance", None),
-            ("GET", "/demo", None),
+            ("GET", "/web", None),  # Changed from /demo to /web
             ("POST", "/api/config/robot", {"robot_type": "so101"}),
         ]
         

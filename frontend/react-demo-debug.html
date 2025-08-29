@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>React Demo Debug</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            background: #1f2937; 
+            color: white; 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+        }
+        .debug-info { 
+            background: #374151; 
+            padding: 20px; 
+            border-radius: 8px; 
+            margin-bottom: 20px; 
+        }
+        .error { color: #ef4444; }
+        .success { color: #10b981; }
+        .warning { color: #f59e0b; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // Simple debug component
+        function DebugComponent() {
+            const [status, setStatus] = React.useState('Initializing...');
+            const [errors, setErrors] = React.useState([]);
+            const [dependencies, setDependencies] = React.useState({});
+
+            React.useEffect(() => {
+                // Check React availability
+                try {
+                    if (typeof React !== 'undefined') {
+                        setDependencies(prev => ({ ...prev, react: '✅ Available' }));
+                    } else {
+                        setDependencies(prev => ({ ...prev, react: '❌ Missing' }));
+                        setErrors(prev => [...prev, 'React is not defined']);
+                    }
+                } catch (e) {
+                    setDependencies(prev => ({ ...prev, react: '❌ Error' }));
+                    setErrors(prev => [...prev, `React error: ${e.message}`]);
+                }
+
+                // Check ReactDOM availability
+                try {
+                    if (typeof ReactDOM !== 'undefined') {
+                        setDependencies(prev => ({ ...prev, reactDOM: '✅ Available' }));
+                    } else {
+                        setDependencies(prev => ({ ...prev, reactDOM: '❌ Missing' }));
+                        setErrors(prev => [...prev, 'ReactDOM is not defined']);
+                    }
+                } catch (e) {
+                    setDependencies(prev => ({ ...prev, reactDOM: '❌ Error' }));
+                    setErrors(prev => [...prev, `ReactDOM error: ${e.message}`]);
+                }
+
+                // Check if we can create a root
+                try {
+                    const root = ReactDOM.createRoot(document.getElementById('root'));
+                    setDependencies(prev => ({ ...prev, createRoot: '✅ Available' }));
+                    setStatus('Ready');
+                } catch (e) {
+                    setDependencies(prev => ({ ...prev, createRoot: '❌ Error' }));
+                    setErrors(prev => [...prev, `createRoot error: ${e.message}`]);
+                    setStatus('Failed');
+                }
+            }, []);
+
+            return React.createElement('div', { className: 'debug-info' }, [
+                React.createElement('h1', { key: 'title' }, 'React Demo Debug'),
+                React.createElement('p', { key: 'status', className: status === 'Ready' ? 'success' : 'warning' }, 
+                    `Status: ${status}`),
+                
+                React.createElement('h2', { key: 'deps-title' }, 'Dependencies:'),
+                React.createElement('ul', { key: 'deps-list' }, 
+                    Object.entries(dependencies).map(([name, status]) => 
+                        React.createElement('li', { key: name }, `${name}: ${status}`)
+                    )
+                ),
+
+                errors.length > 0 && React.createElement('div', { key: 'errors' }, [
+                    React.createElement('h2', { key: 'errors-title', className: 'error' }, 'Errors:'),
+                    React.createElement('ul', { key: 'errors-list' }, 
+                        errors.map((error, index) => 
+                            React.createElement('li', { key: index, className: 'error' }, error)
+                        )
+                    )
+                ]),
+
+                React.createElement('button', {
+                    key: 'test-btn',
+                    onClick: () => {
+                        try {
+                            const testDiv = document.createElement('div');
+                            testDiv.textContent = 'Test successful!';
+                            testDiv.style.background = '#10b981';
+                            testDiv.style.padding = '10px';
+                            testDiv.style.margin = '10px 0';
+                            testDiv.style.borderRadius = '4px';
+                            document.body.appendChild(testDiv);
+                        } catch (e) {
+                            setErrors(prev => [...prev, `Test button error: ${e.message}`]);
+                        }
+                    },
+                    style: {
+                        background: '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        padding: '10px 20px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        marginTop: '20px'
+                    }
+                }, 'Test DOM Manipulation')
+            ]);
+        }
+
+        // Render the debug component
+        try {
+            const { StrictMode } = React;
+            const { createRoot } = ReactDOM;
+
+            const root = createRoot(document.getElementById('root'));
+            root.render(
+                React.createElement(StrictMode, null,
+                    React.createElement(DebugComponent)
+                )
+            );
+        } catch (error) {
+            // Fallback if React rendering fails
+            document.getElementById('root').innerHTML = `
+                <div class="debug-info">
+                    <h1>React Rendering Failed</h1>
+                    <p class="error">Error: ${error.message}</p>
+                    <p>This indicates a problem with React initialization.</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
