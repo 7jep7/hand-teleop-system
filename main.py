@@ -387,14 +387,19 @@ def show_project_info():
     print(f"💻 CPU Cores: {multiprocessing.cpu_count()}")
     
     # Check key dependencies
-    dependencies = ["fastapi", "opencv-python", "mediapipe", "numpy"]
+    dependencies = [
+        ("fastapi", "fastapi"),
+        ("opencv-python", "cv2"), 
+        ("mediapipe", "mediapipe"),
+        ("numpy", "numpy")
+    ]
     print("\n📦 Key Dependencies:")
-    for dep in dependencies:
+    for dep_name, import_name in dependencies:
         try:
-            __import__(dep.replace("-", "_"))
-            print(f"   ✅ {dep}")
+            __import__(import_name)
+            print(f"   ✅ {dep_name}")
         except ImportError:
-            print(f"   ❌ {dep} (missing)")
+            print(f"   ❌ {dep_name} (missing)")
     
     print()
     return True
