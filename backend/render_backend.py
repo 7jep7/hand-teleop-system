@@ -49,7 +49,9 @@ app.add_middleware(
         "http://127.0.0.1:3001",
         "http://127.0.0.1:8000",
         "https://jonaspetersen.com",
-        "https://www.jonaspetersen.com"
+        "https://www.jonaspetersen.com",
+        "https://jonaspetersen.vercel.app",  # If using Vercel
+        "https://*.jonaspetersen.com"        # For subdomains
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
@@ -634,15 +636,15 @@ async def websocket_live_tracking(websocket: WebSocket):
                                 "index_mcp": 5       # Index finger MCP joint (base connecting to palm)
                             }
                             
-                            # Colors for each point
+                            # Colors for each point (more aesthetically pleasing)
                             colors = {
-                                "thumb_tip": (255, 0, 0),    # Blue for thumb tip
-                                "index_tip": (0, 255, 0),    # Green for index tip
-                                "index_pip": (0, 165, 255),  # Orange for index middle joint
-                                "index_mcp": (255, 255, 0)   # Cyan for base joint
+                                "thumb_tip": (255, 80, 80),     # Soft red for thumb tip
+                                "index_tip": (80, 255, 80),     # Soft green for index tip
+                                "index_pip": (255, 180, 80),    # Soft orange for index middle joint
+                                "index_mcp": (80, 200, 255)     # Soft blue for base joint
                             }
                             
-                            # Draw the 4 key points
+                            # Draw the 4 key points with better aesthetics
                             detected_points = 0
                             for point_name, landmark_idx in key_points.items():
                                 if landmark_idx < len(landmarks):
@@ -650,43 +652,48 @@ async def websocket_live_tracking(websocket: WebSocket):
                                     x = int(landmark["x"] * w)
                                     y = int(landmark["y"] * h)
                                     
-                                    # Draw larger, more visible circles
+                                    # Draw smaller, more refined circles
                                     color = colors[point_name]
-                                    cv2.circle(annotated_frame, (x, y), 8, color, -1)
-                                    cv2.circle(annotated_frame, (x, y), 10, (255, 255, 255), 2)  # White border
                                     
-                                    # Add labels
+                                    # Outer glow effect
+                                    cv2.circle(annotated_frame, (x, y), 8, color, 2)
+                                    # Inner filled circle
+                                    cv2.circle(annotated_frame, (x, y), 4, color, -1)
+                                    # Small white center dot for precision
+                                    cv2.circle(annotated_frame, (x, y), 1, (255, 255, 255), -1)
+                                    
+                                    # Smaller, cleaner labels
                                     label = point_name.replace("_", " ").title()
-                                    cv2.putText(annotated_frame, label, (x - 20, y - 15), 
-                                              cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+                                    cv2.putText(annotated_frame, label, (x - 15, y - 12), 
+                                              cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
                                     detected_points += 1
                             
-                            # Draw connection lines between key points if available
+                            # Draw subtle connection lines between key points if available
                             if len(landmarks) >= 9:  # Ensure we have enough landmarks
-                                # Line from thumb tip to index base (grip span)
+                                # Line from thumb tip to index base (grip span) - subtle purple
                                 thumb_tip = landmarks[4]
                                 index_base = landmarks[5]
                                 
                                 pt1 = (int(thumb_tip["x"] * w), int(thumb_tip["y"] * h))
                                 pt2 = (int(index_base["x"] * w), int(index_base["y"] * h))
-                                cv2.line(annotated_frame, pt1, pt2, (255, 0, 255), 2)  # Magenta line
+                                cv2.line(annotated_frame, pt1, pt2, (180, 120, 180), 1)  # Subtle purple line
                                 
-                                # Line from index base to index tip (finger extension)
+                                # Line from index base to index tip (finger extension) - subtle cyan
                                 index_tip = landmarks[8]
                                 index_pip = landmarks[6]
                                 
                                 pt3 = (int(index_tip["x"] * w), int(index_tip["y"] * h))
                                 pt4 = (int(index_pip["x"] * w), int(index_pip["y"] * h))
-                                cv2.line(annotated_frame, pt2, pt4, (0, 255, 255), 2)  # Yellow line
-                                cv2.line(annotated_frame, pt4, pt3, (0, 255, 255), 2)  # Yellow line
+                                cv2.line(annotated_frame, pt2, pt4, (150, 180, 150), 1)  # Subtle green line
+                                cv2.line(annotated_frame, pt4, pt3, (150, 180, 150), 1)  # Subtle green line
                             
-                            # Status text with tracking mode and point count
+                            # Clean status text
                             status_text = f"Hand Teleop - {tracking_mode.upper()} ({detected_points}/4 points)"
                             cv2.putText(annotated_frame, status_text, (10, 25), 
-                                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
                         else:
                             cv2.putText(annotated_frame, f"No Hand - {tracking_mode.upper()}", (10, 25), 
-                                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.6, (150, 150, 150), 1)
                         
                         # Fast JPEG encoding with lower quality for speed
                         encode_params = [cv2.IMWRITE_JPEG_QUALITY, 80]  # Lower quality = faster
@@ -950,13 +957,10 @@ async def process_hand_tracking_fast(frame: np.ndarray, robot_type: str, trackin
                     "visibility": float(lm.get("visibility", 1.0))
                 })
                 
-            print(f"[DEBUG] Hand detected with {len(hand_pose['landmarks'])} landmarks")
-            # Debug the key points
+            # Log hand detection for monitoring
             if len(hand_pose["landmarks"]) >= 9:
-                thumb_tip = hand_pose["landmarks"][4]
-                index_tip = hand_pose["landmarks"][8] 
-                print(f"[DEBUG] Thumb tip: ({thumb_tip['x']:.3f}, {thumb_tip['y']:.3f})")
-                print(f"[DEBUG] Index tip: ({index_tip['x']:.3f}, {index_tip['y']:.3f})")
+                # Hand detected successfully
+                pass
         else:
             # Fallback: create empty landmarks if no detection
             for i in range(21):
