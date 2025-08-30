@@ -1,1949 +1,821 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hand Teleop - Real-time Tracking</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
-    
-    <!-- Three.js and Physics Libraries -->
-    <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"></script>
-    
-    <!-- STL Loader for SO-101 robot meshes -->
-    <script src="https://unpkg.com/three@0.158.0/examples/js/loaders/STLLoader.js"></script>
-    
-    <!-- OrbitControls as inline script -->
-    <script>
-        // Simple camera controls to replace OrbitControls if needed
-        class SimpleCameraControls {
-            constructor(camera, domElement) {
-                this.camera = camera;
-                this.domElement = domElement;
-                this.target = new THREE.Vector3(0, 0, 0.3);
-                this.enableDamping = true;
-                this.dampingFactor = 0.05;
-                
-                this.spherical = new THREE.Spherical();
-                this.sphericalDelta = new THREE.Spherical();
-                
-                this.isMouseDown = false;
-                this.mouseButtons = { LEFT: 0, MIDDLE: 1, RIGHT: 2 };
-                
-                this.setupEventListeners();
-            }
-            
-            setupEventListeners() {
-                this.domElement.addEventListener('mousedown', (e) => this.onMouseDown(e));
-                this.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
-                this.domElement.addEventListener('mouseup', (e) => this.onMouseUp(e));
-                this.domElement.addEventListener('wheel', (e) => this.onMouseWheel(e));
-            }
-            
-            onMouseDown(event) {
-                this.isMouseDown = true;
-                this.lastMousePosition = { x: event.clientX, y: event.clientY };
-            }
-            
-            onMouseMove(event) {
-                if (!this.isMouseDown) return;
-                
-                const deltaX = event.clientX - this.lastMousePosition.x;
-                const deltaY = event.clientY - this.lastMousePosition.y;
-                
-                this.sphericalDelta.theta -= deltaX * 0.01;
-                this.sphericalDelta.phi -= deltaY * 0.01;
-                
-                this.lastMousePosition = { x: event.clientX, y: event.clientY };
-            }
-            
-            onMouseUp(event) {
-                this.isMouseDown = false;
-            }
-            
-            onMouseWheel(event) {
-                const scale = event.deltaY > 0 ? 1.1 : 0.9;
-                this.camera.position.multiplyScalar(scale);
-            }
-            
-            update() {
-                // Simple orbit behavior
-                if (this.sphericalDelta.theta !== 0 || this.sphericalDelta.phi !== 0) {
-                    const offset = new THREE.Vector3().copy(this.camera.position).sub(this.target);
-                    this.spherical.setFromVector3(offset);
-                    
-                    this.spherical.theta += this.sphericalDelta.theta;
-                    this.spherical.phi += this.sphericalDelta.phi;
-                    
-                    this.spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.spherical.phi));
-                    
-                    offset.setFromSpherical(this.spherical);
-                    this.camera.position.copy(this.target).add(offset);
-                    this.camera.lookAt(this.target);
-                    
-                    if (this.enableDamping) {
-                        this.sphericalDelta.theta *= (1 - this.dampingFactor);
-                        this.sphericalDelta.phi *= (1 - this.dampingFactor);
-                    } else {
-                        this.sphericalDelta.set(0, 0, 0);
-                    }
-                }
-            }
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"     function HandTeleopDemo() {
+      const [selectedRobot, setSelectedRobot] = React.useState('so101');
+      const [selectedModel, setSelectedModel] = React.useState('mediapipe');
+      const [isConnected, setIsConnected] = React.useState(false);
+      const [isCameraActive, setIsCameraActive] = React.useState(false);
+      const [isTracking, setIsTracking] = React.useState(false);
+      const [showAnalytics, setShowAnalytics] = React.useState(false);
+      const [jointPositions, setJointPositions] = React.useState([0, 0, 0, 0, 0, 0]); // 6 joint positions
+      const [robotInitialized, setRobotInitialized] = React.useState(false);
+      const [consoleLogs, setConsoleLogs] = React.useState([]);
+      const [handLandmarks, setHandLandmarks] = React.useState(null);
+      const [fingertipData, setFingertipData] = React.useState({
+        thumb: null,
+        indexPip: null,
+        indexTip: null,
+        timestamp: Date.now()
+      });
+
+      // Add global error handler
+      React.useEffect(() => {
+        const handleError = (event) => {
+          console.error('Global error caught:', event.error);
+          addToConsole('Error: ' + (event.error?.message || 'Unknown error'));
+        };
         
-        // Make it available on THREE namespace for compatibility
-        if (typeof THREE !== 'undefined') {
-            THREE.OrbitControls = SimpleCameraControls;
-        }
-    </script>
-    <style>
-        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
-        #canvas-container { 
-            position: relative; 
-            width: 100vw; 
-            height: 70vh; 
-            background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 100%);
-        }
-        #controls { 
-            background: rgba(15, 23, 42, 0.95); 
-            backdrop-filter: blur(10px);
-        }
-        .joint-slider {
-            appearance: none;
-            width: 100%;
-            height: 6px;
-            border-radius: 3px;
-            background: #334155;
-            outline: none;
-        }
-        .joint-slider::-webkit-slider-thumb {
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: #3b82f6;
-            cursor: pointer;
-        }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 8px;
-        }
-        .status-connected { background-color: #22c55e; }
-        .status-disconnected { background-color: #ef4444; }
-        .status-loading { background-color: #f59e0b; animation: pulse 2s infinite; }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-    </style>
+        window.addEventListener('error', handleError);
+        
+        return () => {
+          window.removeEventListener('error', handleError);
+        };
+      }, []);Teleop System Demo</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  
+  <!-- Three.js and MediaPipe for 3D and hand tracking -->
+  <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.158.0/examples/js/loaders/STLLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+  <style>
+    @tailwind base;
+    @tailwind components;
+    @tailwind utilities;
+    :root {
+      --background: hsl(0, 0%, 4%);
+      --foreground: hsl(0, 0%, 100%);
+      --muted: hsl(0, 0%, 10%);
+      --muted-foreground: hsl(0, 0%, 64%);
+      --popover: hsl(0, 0%, 4%);
+      --popover-foreground: hsl(0, 0%, 100%);
+      --card: hsl(0, 0%, 10%);
+      --card-foreground: hsl(0, 0%, 100%);
+      --border: hsl(0, 0%, 15%);
+      --input: hsl(0, 0%, 15%);
+      --primary: hsl(20, 95%, 54%);
+      --primary-foreground: hsl(0, 0%, 100%);
+      --secondary: hsl(0, 0%, 10%);
+      --secondary-foreground: hsl(0, 0%, 100%);
+      --accent: hsl(0, 0%, 10%);
+      --accent-foreground: hsl(0, 0%, 100%);
+      --destructive: hsl(0, 84%, 60%);
+      --destructive-foreground: hsl(0, 0%, 98%);
+      --ring: hsl(20, 95%, 54%);
+      --radius: 0.75rem;
+    }
+    .dark {
+      --background: hsl(0, 0%, 4%);
+      --foreground: hsl(0, 0%, 100%);
+      --muted: hsl(0, 0%, 10%);
+      --muted-foreground: hsl(0, 0%, 64%);
+      --popover: hsl(0, 0%, 4%);
+      --popover-foreground: hsl(0, 0%, 100%);
+      --card: hsl(0, 0%, 10%);
+      --card-foreground: hsl(0, 0%, 100%);
+      --border: hsl(0, 0%, 15%);
+      --input: hsl(0, 0%, 15%);
+      --primary: hsl(20, 95%, 54%);
+      --primary-foreground: hsl(0, 0%, 100%);
+      --secondary: hsl(0, 0%, 10%);
+      --secondary-foreground: hsl(0, 0%, 100%);
+      --accent: hsl(0, 0%, 10%);
+      --accent-foreground: hsl(0, 0%, 100%);
+      --destructive: hsl(0, 84%, 60%);
+      --destructive-foreground: hsl(0, 0%, 98%);
+      --ring: hsl(20, 95%, 54%);
+    }
+    @layer base {
+      * { border-color: hsl(var(--border)); }
+      html { scroll-behavior: smooth; }
+      body {
+        background-color: var(--background);
+        color: var(--foreground);
+        font-family: 'Inter', sans-serif;
+      }
+    }
+    @layer utilities {
+      .text-gradient {
+        background: linear-gradient(135deg, hsl(20, 95%, 54%) 0%, hsl(30, 100%, 60%) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .backdrop-blur-glass {
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+      
+      /* Custom slider styles */
+      .slider::-webkit-slider-thumb {
+        appearance: none;
+        height: 20px;
+        width: 20px;
+        border-radius: 50%;
+        background: #f97316;
+        cursor: pointer;
+        border: 2px solid #ffffff;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+      
+      .slider::-moz-range-thumb {
+        height: 20px;
+        width: 20px;
+        border-radius: 50%;
+        background: #f97316;
+        cursor: pointer;
+        border: 2px solid #ffffff;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+      
+      .slider:focus::-webkit-slider-thumb {
+        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.3);
+      }
+    }
+    html, body {
+      background-color: #fff;
+      color: #111;
+    }
+    @media (prefers-color-scheme: dark) {
+      html, body { color-scheme: dark; }
+    }
+  </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-gray-900 mb-2">Hand Teleop System</h1>
-            <p class="text-gray-600 text-lg">Real-time fingertip tracking for robot control</p>
-            
-            <!-- Model Selection -->
-            <div class="mt-4 flex justify-center items-center space-x-4">
-                <label class="text-sm font-medium text-gray-700">Tracking Model:</label>
-                <div class="flex bg-gray-100 rounded-lg p-1">
-                    <button id="mediapipeBtn" class="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white transition-colors">
-                        MediaPipe
-                    </button>
-                    <button id="wilorBtn" class="px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800 transition-colors">
-                        WiLoR
-                    </button>
-                </div>
-                <span id="modelStatus" class="text-sm text-blue-600 font-medium">Live Tracking</span>
-            </div>
-        </div>
-        
-        <!-- Main Content -->
-        <div class="max-w-7xl mx-auto">
-            <!-- SO-101 Advanced Render Integration -->
-            <div class="flex h-[70vh] bg-slate-900 rounded-lg shadow-lg mb-8">
-                <!-- 3D Viewport -->
-                <div id="canvas-container" class="flex-1 relative">
-                    <canvas id="robot-canvas" class="w-full h-full"></canvas>
-                    <!-- Loading Overlay -->
-                    <div id="loading-overlay" class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-                        <div class="text-center">
-                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                            <p class="text-lg">Loading SO-101 Robot...</p>
-                            <p id="loading-status" class="text-sm text-slate-400">Initializing...</p>
-                        </div>
-                    </div>
-                </div>
-                <!-- Control Panel -->
-                <div id="controls" class="w-80 p-6 overflow-y-auto">
-                    <h3 class="text-lg font-semibold mb-4">Joint Controls</h3>
-                    <div id="joint-controls" class="space-y-4"></div>
-                    <hr class="border-slate-600 my-6">
-                    <h3 class="text-lg font-semibold mb-4">Robot Information</h3>
-                    <div id="robot-info" class="space-y-2 text-sm">
-                        <div>Model: <span class="text-blue-400">SO-101</span></div>
-                        <div>DOF: <span id="dof-display" class="text-blue-400">6</span></div>
-                        <div>Status: <span id="robot-status" class="text-green-400">Ready</span></div>
-                    </div>
-                    <hr class="border-slate-600 my-6">
-                    <h3 class="text-lg font-semibold mb-4">Demo Controls</h3>
-                    <div class="space-y-3">
-                        <button id="home-position" class="w-full bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded transition">Home Position</button>
-                        <button id="demo-motion" class="w-full bg-green-600 hover:bg-green-700 px-4 py-2 rounded transition">Demo Motion</button>
-                        <button id="random-motion" class="w-full bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded transition">Random Motion</button>
-                        <button id="reset-robot" class="w-full bg-red-600 hover:bg-red-700 px-4 py-2 rounded transition">Reset Robot</button>
-                    </div>
-                    <hr class="border-slate-600 my-6">
-                    <h3 class="text-lg font-semibold mb-4">Debug Info</h3>
-                    <div id="debug-info" class="text-xs space-y-1 font-mono text-slate-400">
-                        <div>Messages: <span id="msg-count">0</span></div>
-                        <div>Last Update: <span id="last-update">Never</span></div>
-                        <div>WebSocket: <span id="ws-status">Disconnected</span></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Analytics Panel (Foldable) -->
-            <div class="bg-white rounded-lg shadow-lg overflow-hidden">
-                <button id="analyticsToggle" class="w-full px-6 py-4 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between">
-                    <div class="flex items-center">
-                        <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                        </svg>
-                        <h3 class="text-lg font-semibold text-gray-800">Analytics & Camera View</h3>
-                    </div>
-                    <svg id="analyticsChevron" class="w-5 h-5 text-gray-600 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                </button>
+<body class="dark">
+  <div id="root"></div>
+  <script type="text/babel">
+    const ROBOTS = [
+      { id: 'ur5e', name: 'UR5e', dof: 6 },
+      { id: 'franka', name: 'Franka Emika Panda', dof: 7 },
+      { id: 'kinova', name: 'Kinova Gen3', dof: 7 },
+      { id: 'kuka', name: 'KUKA LBR iiwa', dof: 7 },
+      { id: 'so101', name: 'SO-101 Humanoid Hand', dof: 5 },
+      { id: 'simulation', name: 'Simulation Mode', dof: 6 }
+    ];
+    const HAND_MODELS = [
+      { id: 'mediapipe', name: 'MediaPipe Hands' },
+      { id: 'wilor', name: 'WiLoR' }
+    ];
+
+    const API_BASE = 'http://localhost:8000';
+
+    function HandTeleopDemo() {
+      const [selectedRobot, setSelectedRobot] = React.useState('so101');
+      const [selectedModel, setSelectedModel] = React.useState('mediapipe');
+      const [isConnected, setIsConnected] = React.useState(false);
+      const [isCameraActive, setIsCameraActive] = React.useState(false);
+      const [isTracking, setIsTracking] = React.useState(false);
+      const [showAnalytics, setShowAnalytics] = React.useState(false);
+      const [jointPositions, setJointPositions] = React.useState([0, 0, 0, 0, 0, 0]); // 6 joint positions
+      const [robotInitialized, setRobotInitialized] = React.useState(false);
+      const [consoleLogs, setConsoleLogs] = React.useState([]);
+      const [handLandmarks, setHandLandmarks] = React.useState(null);
+      const [fingertipData, setFingertipData] = React.useState({
+        thumb: null,
+        indexPip: null,
+        indexTip: null,
+        timestamp: 0
+      });
+
+      // Refs for camera, canvas, and 3D scene
+      const videoRef = React.useRef(null);
+      const canvasRef = React.useRef(null);
+      const streamRef = React.useRef(null);
+      const sceneRef = React.useRef(null);
+      const rendererRef = React.useRef(null);
+      const animationRef = React.useRef(null);
+      const handsRef = React.useRef(null);
+
+      // Helper function to log messages
+      const addToConsole = (message) => {
+        try {
+          const timestamp = new Date().toLocaleTimeString();
+          setConsoleLogs(prev => {
+            const newLogs = [`[${timestamp}] ${message}`, ...prev].slice(0, 50);
+            console.log(`[HandTeleop] ${message}`);
+            return newLogs;
+          });
+        } catch (error) {
+          console.error('Error in addToConsole:', error);
+        }
+      };
+
+      // Initialize MediaPipe Hands
+      React.useEffect(() => {
+        if (typeof Hands !== 'undefined') {
+          const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+          });
+          
+          hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+          });
+
+          hands.onResults((results) => {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+              const landmarks = results.multiHandLandmarks[0];
+              setHandLandmarks(landmarks);
+              
+              // Extract fingertip data
+              const newFingertipData = {
+                thumb: landmarks[4] ? { x: landmarks[4].x * 640, y: landmarks[4].y * 480, z: landmarks[4].z } : null,
+                indexPip: landmarks[6] ? { x: landmarks[6].x * 640, y: landmarks[6].y * 480, z: landmarks[6].z } : null,
+                indexTip: landmarks[8] ? { x: landmarks[8].x * 640, y: landmarks[8].y * 480, z: landmarks[8].z } : null,
+                timestamp: Date.now()
+              };
+              setFingertipData(newFingertipData);
+              
+              // Draw landmarks on canvas
+              if (canvasRef.current) {
+                const ctx = canvasRef.current.getContext('2d');
+                ctx.save();
+                ctx.clearRect(0, 0, 640, 480);
                 
-                <div id="analyticsContent" class="">
-                    <div class="p-6">
-                        <div class="grid lg:grid-cols-2 gap-8">
-            <!-- Left Side - Camera Feed -->
-            <div class="bg-white rounded-lg shadow-lg p-6">
-                <h2 class="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
-                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                    </svg>
-                    Live Camera Feed
-                </h2>
-                
-                <!-- Camera Display -->
-                <div class="camera-container mb-4">
-                    <video id="videoElement" autoplay playsinline class="w-full h-64 object-cover rounded"></video>
-                    <canvas id="outputCanvas" class="absolute top-0 left-0 w-full h-64 rounded"></canvas>
-                    <canvas id="captureCanvas" class="hidden"></canvas>
-                </div>
-                
-                <!-- Controls -->
-                <div class="space-y-4">
-                    <button id="startCamera" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn">
-                        Start Live Tracking
-                    </button>
-                    
-                    <button id="captureBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
-                        Capture & Process (WiLoR)
-                    </button>
-                    
-                    <!-- Fingertip Display -->
-                    <div id="fingertipData" class="hidden bg-gray-50 rounded-lg p-4">
-                        <h4 class="font-semibold text-gray-800 mb-2">Live Fingertips:</h4>
-                        <div class="grid grid-cols-3 gap-2 text-xs">
-                            <div class="bg-yellow-100 p-2 rounded">
-                                <div class="font-medium text-yellow-800">Thumb Tip</div>
-                                <div id="thumbCoords" class="text-yellow-600">-</div>
-                            </div>
-                            <div class="bg-blue-100 p-2 rounded">
-                                <div class="font-medium text-blue-800">Index PIP</div>
-                                <div id="pipCoords" class="text-blue-600">-</div>
-                            </div>
-                            <div class="bg-red-100 p-2 rounded">
-                                <!-- Advanced SO-101 Simulation Script (from so101_simulation.html) -->
-                                <script>
-                                    // STLLoader class (inlined from advanced render)
-                                    class STLLoader extends THREE.Loader {
-                                        // ...existing code from so101_simulation.html...
-                                    }
-                                    // SO-101 Robot Simulation Controller (from so101_simulation.html)
-                                    // ...full SO101Simulation class from so101_simulation.html...
-                                    // Initialize simulation when page loads
-                                    document.addEventListener('DOMContentLoaded', () => {
-                                        new SO101Simulation();
-                                    });
-                                </script>
-                
-                // Objects in scene
-                this.objects = [];
-                
-                this.init();
-            }
-            
-            async init() {
-                try {
-                    console.log('Initializing robot visualization...');
-                    console.log('THREE available:', typeof THREE);
-                    console.log('CANNON available:', typeof CANNON);
-                    console.log('Canvas element:', this.canvas);
-                    
-                    if (!this.canvas) {
-                        throw new Error('Canvas element not found');
+                if (landmarks) {
+                  // Draw hand connections
+                  ctx.strokeStyle = '#00FF00';
+                  ctx.lineWidth = 3;
+                  const connections = [
+                    [0,1],[1,2],[2,3],[3,4], // thumb
+                    [0,5],[5,6],[6,7],[7,8], // index
+                    [5,9],[9,10],[10,11],[11,12], // middle
+                    [9,13],[13,14],[14,15],[15,16], // ring
+                    [13,17],[17,18],[18,19],[19,20], // pinky
+                    [0,17] // palm
+                  ];
+                  
+                  connections.forEach(([start, end]) => {
+                    if (landmarks[start] && landmarks[end]) {
+                      ctx.beginPath();
+                      ctx.moveTo(landmarks[start].x * 640, landmarks[start].y * 480);
+                      ctx.lineTo(landmarks[end].x * 640, landmarks[end].y * 480);
+                      ctx.stroke();
                     }
+                  });
+                  
+                  // Draw landmarks with different colors for fingertips
+                  landmarks.forEach((landmark, index) => {
+                    const x = landmark.x * 640;
+                    const y = landmark.y * 480;
                     
-                    if (typeof THREE === 'undefined') {
-                        throw new Error('THREE.js not loaded');
+                    if (index === 4) { // Thumb tip
+                      ctx.fillStyle = '#FF0000';
+                      ctx.strokeStyle = '#FFFFFF';
+                      ctx.lineWidth = 2;
+                      ctx.beginPath();
+                      ctx.arc(x, y, 8, 0, 2 * Math.PI);
+                      ctx.fill();
+                      ctx.stroke();
+                      
+                      // Label
+                      ctx.fillStyle = '#FFFFFF';
+                      ctx.font = '12px Arial';
+                      ctx.fillText('THUMB', x + 10, y - 10);
+                    } else if (index === 8) { // Index tip
+                      ctx.fillStyle = '#0000FF';
+                      ctx.strokeStyle = '#FFFFFF';
+                      ctx.lineWidth = 2;
+                      ctx.beginPath();
+                      ctx.arc(x, y, 8, 0, 2 * Math.PI);
+                      ctx.fill();
+                      ctx.stroke();
+                      
+                      // Label
+                      ctx.fillStyle = '#FFFFFF';
+                      ctx.font = '12px Arial';
+                      ctx.fillText('INDEX', x + 10, y - 10);
+                    } else {
+                      ctx.fillStyle = '#00FF00';
+                      ctx.beginPath();
+                      ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                      ctx.fill();
                     }
+                  });
+                  
+                  // Draw distance line between thumb and index
+                  if (landmarks[4] && landmarks[8]) {
+                    const thumbX = landmarks[4].x * 640;
+                    const thumbY = landmarks[4].y * 480;
+                    const indexX = landmarks[8].x * 640;
+                    const indexY = landmarks[8].y * 480;
                     
-                    this.initThreeJS();
-                    console.log('Three.js initialized successfully');
+                    ctx.strokeStyle = '#FFFF00';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    ctx.moveTo(thumbX, thumbY);
+                    ctx.lineTo(indexX, indexY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
                     
-                    // Skip physics for minimal professional setup
-                    this.world = null;
-                    console.log('Physics disabled for minimal setup');
-                    
-                    await this.loadRobot();
-                    console.log('Robot loaded successfully');
-                    
-                    this.setupLighting();
-                    console.log('Lighting setup complete');
-                    
-                    this.setupEnvironment();
-                    console.log('Environment setup complete');
-                    
-                    this.animate();
-                    console.log('Animation started');
-                    
-                    // Hide loading overlay
-                    if (this.loadingOverlay) {
-                        this.loadingOverlay.style.display = 'none';
-                    }
-                    
-                    console.log('Robot visualization initialized successfully');
-                } catch (error) {
-                    console.error('Error initializing robot visualization:', error);
-                    console.error('Error stack:', error.stack);
-                    this.showError(`Failed to load robot visualization: ${error.message}`);
+                    // Distance text
+                    const distance = Math.sqrt(Math.pow(thumbX - indexX, 2) + Math.pow(thumbY - indexY, 2));
+                    ctx.fillStyle = '#FFFF00';
+                    ctx.font = '14px Arial';
+                    ctx.fillText(`Distance: ${distance.toFixed(1)}px`, 10, 30);
+                  }
                 }
+                ctx.restore();
+              }
+            } else {
+              setHandLandmarks(null);
+              setFingertipData({
+                thumb: null,
+                indexPip: null,
+                indexTip: null,
+                timestamp: Date.now()
+              });
             }
-            
-            initThreeJS() {
-                // Scene - clean bright background
-                this.scene = new THREE.Scene();
-                this.scene.background = new THREE.Color(0xf8fafc); // Very light gray/white
-                
-                // Camera - positioned for nice robot view
-                this.camera = new THREE.PerspectiveCamera(
-                    45, // Narrower FOV for more professional look
-                    this.canvas.clientWidth / this.canvas.clientHeight,
-                    0.1,
-                    100
+          });
+
+          handsRef.current = hands;
+        }
+      }, []);
+
+      // Initialize SO-101 robot visualization on mount
+      React.useEffect(() => {
+        // Use a ref instead of direct DOM manipulation
+        const timer = setTimeout(() => {
+          initSO101Robot();
+        }, 200);
+        
+        return () => {
+          clearTimeout(timer);
+          cleanupRobot();
+        };
+      }, []);
+
+      // Use a ref for the robot container instead of getElementById
+      const robotContainerRef = React.useRef(null);
+
+      const cleanupRobot = () => {
+        try {
+          if (animationRef.current) {
+            cancelAnimationFrame(animationRef.current);
+            animationRef.current = null;
+          }
+          
+          if (rendererRef.current) {
+            rendererRef.current.dispose();
+            rendererRef.current = null;
+          }
+          
+          if (sceneRef.current) {
+            sceneRef.current.clear();
+            sceneRef.current = null;
+          }
+        } catch (error) {
+          console.log('Cleanup error (safe to ignore):', error);
+        }
+      };
+
+      const initSO101Robot = () => {
+        if (robotInitialized) return;
+        
+        const robotContainer = robotContainerRef.current;
+        if (!robotContainer) {
+          console.log('Robot container ref not ready, retrying...');
+          setTimeout(initSO101Robot, 200);
+          return;
+        }
+
+        try {
+          // Clear container safely using React ref
+          robotContainer.innerHTML = '';
+
+          // Create Three.js scene
+          const scene = new THREE.Scene();
+          scene.background = new THREE.Color(0x1a1a1a);
+          
+          const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+          camera.position.set(0, 0, 300);
+          
+          const renderer = new THREE.WebGLRenderer({ antialias: true });
+          renderer.setSize(400, 400);
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          
+          robotContainer.appendChild(renderer.domElement);
+          
+          // Add lighting
+          const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+          scene.add(ambientLight);
+          
+          const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+          directionalLight.position.set(100, 100, 50);
+          directionalLight.castShadow = true;
+          scene.add(directionalLight);
+          
+          // Create a simple robot representation since STL loading might fail
+          const robotGroup = new THREE.Group();
+        
+        // Base (gray box)
+        const baseGeometry = new THREE.BoxGeometry(40, 10, 40);
+        const baseMaterial = new THREE.MeshPhongMaterial({ color: 0x666666 });
+        const base = new THREE.Mesh(baseGeometry, baseMaterial);
+        base.position.y = -20;
+        robotGroup.add(base);
+        
+        // Moving parts (orange boxes to represent gripper)
+        const jaw1Geometry = new THREE.BoxGeometry(15, 30, 8);
+        const jawMaterial = new THREE.MeshPhongMaterial({ color: 0xff6600 });
+        const jaw1 = new THREE.Mesh(jaw1Geometry, jawMaterial);
+        jaw1.position.set(-10, 0, 0);
+        robotGroup.add(jaw1);
+        
+        const jaw2 = new THREE.Mesh(jaw1Geometry, jawMaterial);
+        jaw2.position.set(10, 0, 0);
+        robotGroup.add(jaw2);
+        
+        scene.add(robotGroup);
+        
+        sceneRef.current = scene;
+        rendererRef.current = renderer;
+        setRobotInitialized(true);
+        
+        addToConsole('SO-101 robot model loaded successfully');
+        
+        // Animation loop
+        const animate = () => {
+          if (sceneRef.current && rendererRef.current) {
+            // Rotate robot based on hand position or joint controls
+            if (fingertipData.indexTip) {
+              const rotationY = (fingertipData.indexTip.x - 320) * 0.01;
+              robotGroup.rotation.y = rotationY;
+              
+              // Move jaws based on thumb-index distance
+              if (fingertipData.thumb && fingertipData.indexTip) {
+                const distance = Math.sqrt(
+                  Math.pow(fingertipData.thumb.x - fingertipData.indexTip.x, 2) +
+                  Math.pow(fingertipData.thumb.y - fingertipData.indexTip.y, 2)
                 );
-                this.camera.position.set(0.8, 0.8, 0.7);
-                this.camera.lookAt(0, 0, 0.25);
+                const jawOffset = Math.max(5, Math.min(15, distance / 10));
+                jaw1.position.x = -jawOffset;
+                jaw2.position.x = jawOffset;
                 
-                // Renderer
-                this.renderer = new THREE.WebGLRenderer({ 
-                    canvas: this.canvas,
-                    antialias: true,
-                    alpha: true
-                });
-                this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
-                this.renderer.shadowMap.enabled = true;
-                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-                
-                // Controls - disabled for fixed professional view
-                this.controls = null; // Disable camera controls for stationary robot view
-                console.log('Camera controls disabled for fixed view');
-                
-                // Handle resize
-                window.addEventListener('resize', () => this.onWindowResize());
+                // Update joint positions based on hand tracking
+                const newJoints = [...jointPositions];
+                newJoints[0] = rotationY * 180 / Math.PI; // Base rotation in degrees
+                newJoints[5] = (jawOffset - 10) * 10; // Gripper position
+                setJointPositions(newJoints);
+              }
+            } else {
+              // Use manual joint controls when no hand tracking
+              robotGroup.rotation.y = jointPositions[0] * Math.PI / 180;
+              const jawOffset = 10 + jointPositions[5] / 10;
+              jaw1.position.x = -jawOffset;
+              jaw2.position.x = jawOffset;
             }
             
-            initPhysics() {
-                // Cannon.js world
-                this.world = new CANNON.World();
-                this.world.gravity.set(0, 0, -9.82); // Z-up coordinate system
-                this.world.broadphase = new CANNON.NaiveBroadphase();
-                this.world.solver.iterations = 10;
-                
-                // Ground plane
-                const groundShape = new CANNON.Plane();
-                const groundBody = new CANNON.Body({ mass: 0 });
-                groundBody.addShape(groundShape);
-                groundBody.position.set(0, 0, 0);
-                this.world.add(groundBody);
-            }
-            
-            async loadRobot() {
-                try {
-                    console.log("Loading SO-101 robot with real STL meshes...");
-                    await this.createSO101Robot();
-                } catch (error) {
-                    console.error("Error loading SO-101 robot:", error);
-                    console.log("Falling back to placeholder robot...");
-                    this.createPlaceholderRobot();
-                }
-            }
-
-            async createSO101Robot() {
-                // Create the robot group
-                this.robot = new THREE.Group();
-                this.robot.name = 'so101_robot';
-                
-                // SO-101 robot parts with real STL meshes and bright colors for visibility
-                const robotParts = [
-                    { 
-                        file: 'Base_SO101.stl', 
-                        color: 0xE0E0E0,  // Light grey - base/foundation
-                        position: [0, 0, 0],  // Base link at origin
-                        rotation: [0, 0, 0],  // Base orientation
-                        scale: 0.001,  // Scale down from mm to m
-                        joint: 'base_link',
-                        parent: null
-                    },
-                    { 
-                        file: 'sts3215_03a_v1.stl', 
-                        color: 0xFFFFFF,  // Pure white - shoulder motor (pan)
-                        position: [0, 0, 0.04],  // 4cm above base center
-                        rotation: [0, 0, 0],  // Upright motor
-                        scale: 0.001,  // Scale down
-                        joint: 'shoulder_pan',
-                        parent: 0  // Attached to base
-                    },
-                    { 
-                        file: 'Upper_arm_SO101.stl', 
-                        color: 0xE0E0E0,  // Light grey - upper arm (shoulder lift)
-                        position: [0, 0, 0.03],  // 3cm above motor
-                        rotation: [-Math.PI/2, 0, 0],  // Rotate to extend horizontally
-                        scale: 0.001,  // Scale down
-                        joint: 'shoulder_lift',
-                        parent: 1  // Attached to shoulder_pan
-                    },
-                    { 
-                        file: 'Under_arm_SO101.stl', 
-                        color: 0xFFFFFF,  // Pure white - lower arm (elbow flex)
-                        position: [0, 0.10, 0],  // 10cm forward from upper arm
-                        rotation: [0, 0, 0],  // Continue horizontal
-                        scale: 0.001,  // Scale down
-                        joint: 'elbow_flex',
-                        parent: 2  // Attached to upper arm
-                    },
-                    { 
-                        file: 'Wrist_Roll_SO101.stl', 
-                        color: 0xE0E0E0,  // Light grey - wrist (wrist flex)
-                        position: [0, 0.08, 0],  // 8cm forward from lower arm
-                        rotation: [0, 0, 0],  // Continue alignment
-                        scale: 0.001,  // Scale down
-                        joint: 'wrist_flex',
-                        parent: 3  // Attached to lower arm
-                    },
-                    { 
-                        file: 'Moving_Jaw_SO101.stl', 
-                        color: 0xFFFFFF,  // Pure white - gripper (final joint)
-                        position: [0, 0.05, 0],  // 5cm forward from wrist
-                        rotation: [0, 0, 0],  // End effector alignment
-                        scale: 0.001,  // Scale down
-                        joint: 'gripper',
-                        parent: 4  // Attached to wrist
-                    },
-                ];
-                
-                // Load STL files and create proper kinematic chain
-                const stlLoader = new THREE.STLLoader();
-                this.robotMeshes = [];
-                this.jointObjects = [];
-                
-                // First pass: create all joint groups
-                for (let i = 0; i < robotParts.length; i++) {
-                    const jointGroup = new THREE.Group();
-                    jointGroup.name = robotParts[i].joint;
-                    jointGroup.userData = { 
-                        jointIndex: i, 
-                        originalPosition: [...robotParts[i].position],
-                        partInfo: robotParts[i]
-                    };
-                    this.jointObjects.push(jointGroup);
-                }
-                
-                // Second pass: load meshes and build hierarchy
-                for (let i = 0; i < robotParts.length; i++) {
-                    const part = robotParts[i];
-                    try {
-                        console.log(`Loading ${part.file}...`);
-                        const geometry = await this.loadSTLFile(stlLoader, part.file);
-                        
-                        // Create metallic material for modern look
-                        const material = new THREE.MeshStandardMaterial({ 
-                            color: part.color,
-                            metalness: 0.8,
-                            roughness: 0.3,
-                            side: THREE.DoubleSide
-                        });
-                        
-                        // Create mesh
-                        const mesh = new THREE.Mesh(geometry, material);
-                        mesh.castShadow = true;
-                        mesh.receiveShadow = true;
-                        mesh.scale.setScalar(part.scale);
-                        mesh.rotation.set(...part.rotation);
-                        mesh.name = part.joint;
-                        
-                        // Add to joint group
-                        const jointGroup = this.jointObjects[i];
-                        jointGroup.add(mesh);
-                        
-                        // Build hierarchy
-                        if (part.parent !== null) {
-                            const parentJoint = this.jointObjects[part.parent];
-                            parentJoint.add(jointGroup);
-                            jointGroup.position.set(...part.position);
-                        } else {
-                            // Root link
-                            this.robot.add(jointGroup);
-                            jointGroup.position.set(...part.position);
-                        }
-                        
-                        this.robotMeshes.push(mesh);
-                        console.log(`✅ Loaded ${part.file}`);
-                        
-                    } catch (error) {
-                        console.error(`❌ Failed to load ${part.file}:`, error);
-                        // Create fallback cube
-                        const fallbackGeometry = new THREE.BoxGeometry(0.05, 0.05, 0.05);
-                        const fallbackMaterial = new THREE.MeshStandardMaterial({ color: part.color });
-                        const fallbackMesh = new THREE.Mesh(fallbackGeometry, fallbackMaterial);
-                        fallbackMesh.name = part.joint + '_fallback';
-                        
-                        const jointGroup = this.jointObjects[i];
-                        jointGroup.add(fallbackMesh);
-                        
-                        if (part.parent !== null) {
-                            const parentJoint = this.jointObjects[part.parent];
-                            parentJoint.add(jointGroup);
-                            jointGroup.position.set(...part.position);
-                        } else {
-                            this.robot.add(jointGroup);
-                            jointGroup.position.set(...part.position);
-                        }
-                    }
-                }
-                
-                // Add to scene
-                this.scene.add(this.robot);
-                console.log("✅ SO-101 robot loaded successfully!");
-                
-                // Set up joint control event listeners
-                this.setupJointControls();
-            }
-
-            loadSTLFile(loader, filename) {
-                return new Promise((resolve, reject) => {
-                    const url = `/api/assets/robot/so101/${filename}`;
-                    console.log(`Loading STL from: ${url}`);
-                    
-                    loader.load(
-                        url,
-                        (geometry) => {
-                            console.log(`✅ STL loaded: ${filename}`);
-                            resolve(geometry);
-                        },
-                        (progress) => {
-                            console.log(`Loading progress for ${filename}:`, progress);
-                        },
-                        (error) => {
-                            console.error(`❌ STL load error for ${filename}:`, error);
-                            reject(error);
-                        }
-                    );
-                });
-            }
-
-            setupJointControls() {
-                // Set up event listeners for joint sliders
-                for (let i = 0; i < 6; i++) {
-                    const slider = document.getElementById(`jointSlider${i}`);
-                    if (slider) {
-                        slider.addEventListener('input', (e) => {
-                            const angle = parseFloat(e.target.value);
-                            this.updateJointAngle(i, angle);
-                        });
-                    }
-                }
-            }
-
-            updateJointAngle(jointIndex, angleDegrees) {
-                const angleRadians = (angleDegrees * Math.PI) / 180;
-                this.jointAngles[jointIndex] = angleRadians;
-                
-                // Update joint display
-                const jointDisplay = document.getElementById(`joint${jointIndex}`);
-                if (jointDisplay) {
-                    jointDisplay.textContent = `${angleDegrees.toFixed(1)}°`;
-                }
-                
-                // Apply rotation to robot
-                this.updateRobotVisualization();
-            }
-
-            updateRobotVisualization() {
-                if (!this.jointObjects || this.jointObjects.length === 0) return;
-                
-                // Apply joint rotations in proper sequence
-                try {
-                    // Base rotation (Y-axis)
-                    if (this.jointObjects[0]) {
-                        this.jointObjects[0].rotation.y = this.jointAngles[0];
-                    }
-                    
-                    // Shoulder pan (Z-axis)
-                    if (this.jointObjects[1]) {
-                        this.jointObjects[1].rotation.z = this.jointAngles[1];
-                    }
-                    
-                    // Shoulder lift (X-axis for horizontal motion)
-                    if (this.jointObjects[2]) {
-                        this.jointObjects[2].rotation.x = this.jointAngles[2];
-                    }
-                    
-                    // Elbow flex (X-axis)
-                    if (this.jointObjects[3]) {
-                        this.jointObjects[3].rotation.x = this.jointAngles[3];
-                    }
-                    
-                    // Wrist flex (X-axis)
-                    if (this.jointObjects[4]) {
-                        this.jointObjects[4].rotation.x = this.jointAngles[4];
-                    }
-                    
-                    // Gripper (Z-axis)
-                    if (this.jointObjects[5]) {
-                        this.jointObjects[5].rotation.z = this.jointAngles[5];
-                    }
-                } catch (error) {
-                    console.error("Error updating robot visualization:", error);
-                }
-            }
-            
-            createPlaceholderRobot() {
-                console.log("Creating placeholder robot...");
-                
-                // Create the robot group
-                this.robot = new THREE.Group();
-                this.robot.name = 'so101_placeholder';
-                
-                // Super bright placeholder cubes for maximum visibility
-                const robotParts = [
-                    { name: 'base_link', color: 0xE0E0E0, position: [0, 0, 0], size: [0.08, 0.08, 0.03] },
-                    { name: 'shoulder_pan', color: 0xFFFFFF, position: [0, 0, 0.04], size: [0.05, 0.05, 0.06] },
-                    { name: 'shoulder_lift', color: 0xE0E0E0, position: [0, 0, 0.03], size: [0.04, 0.10, 0.04] },
-                    { name: 'elbow_flex', color: 0xFFFFFF, position: [0, 0.10, 0], size: [0.04, 0.08, 0.04] },
-                    { name: 'wrist_flex', color: 0xE0E0E0, position: [0, 0.08, 0], size: [0.03, 0.05, 0.03] },
-                    { name: 'gripper', color: 0xFFFFFF, position: [0, 0.05, 0], size: [0.03, 0.04, 0.03] }
-                ];
-                
-                this.robotMeshes = [];
-                this.jointObjects = [];
-                
-                // Create joint groups first
-                for (let i = 0; i < robotParts.length; i++) {
-                    const jointGroup = new THREE.Group();
-                    jointGroup.name = robotParts[i].name;
-                    jointGroup.userData = { jointIndex: i };
-                    this.jointObjects.push(jointGroup);
-                }
-                
-                // Create meshes and build hierarchy
-                for (let i = 0; i < robotParts.length; i++) {
-                    const part = robotParts[i];
-                    
-                    // Create cube geometry with metallic material
-                    const geometry = new THREE.BoxGeometry(...part.size);
-                    const material = new THREE.MeshStandardMaterial({ 
-                        color: part.color,
-                        metalness: 0.8,
-                        roughness: 0.3
-                    });
-                    const mesh = new THREE.Mesh(geometry, material);
-                    mesh.castShadow = true;
-                    mesh.receiveShadow = true;
-                    mesh.name = part.name;
-                    
-                    // Add to joint group
-                    const jointGroup = this.jointObjects[i];
-                    jointGroup.add(mesh);
-                    
-                    // Build hierarchy
-                    if (i > 0) {
-                        // Child of previous joint
-                        const parentJoint = this.jointObjects[i - 1];
-                        parentJoint.add(jointGroup);
-                        jointGroup.position.set(...part.position);
-                    } else {
-                        // Root link
-                        this.robot.add(jointGroup);
-                        jointGroup.position.set(...part.position);
-                    }
-                    
-                    this.robotMeshes.push(mesh);
-                }
-                
-                // Add to scene
-                this.scene.add(this.robot);
-                console.log("✅ Placeholder robot created!");
-                
-                // Set up joint controls
-                this.setupJointControls();
-            }
-            
-            addRobotPhysics() {
-                // Physics not implemented for SO-101 robot yet
-                console.log("Robot physics not implemented for STL-based robot");
-            }
-            
-            setupLighting() {
-                // Modern, professional lighting setup for robot visualization
-                
-                // Bright ambient light for excellent visibility
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-                this.scene.add(ambientLight);
-                
-                // Strong directional light (key light) for sharp metallic details
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
-                directionalLight.position.set(5, 8, 3);
-                directionalLight.castShadow = true;
-                directionalLight.shadow.mapSize.width = 2048;
-                directionalLight.shadow.mapSize.height = 2048;
-                this.scene.add(directionalLight);
-                
-                // Fill light from opposite side for even illumination
-                const fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
-                fillLight.position.set(-3, -2, 4);
-                this.scene.add(fillLight);
-                
-                // Rim light for modern industrial look
-                const rimLight = new THREE.DirectionalLight(0xffffff, 0.4);
-                rimLight.position.set(0, -5, 2);
-                this.scene.add(rimLight);
-            }
-            
-            setupEnvironment() {
-                // Minimal, clean environment for robot focus
-                
-                // Simple ground plane - very subtle
-                const groundGeometry = new THREE.PlaneGeometry(2, 2);
-                const groundMaterial = new THREE.MeshStandardMaterial({ 
-                    color: 0xf8f9fa,
-                    roughness: 0.8,
-                    metalness: 0.1
-                });
-                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-                ground.rotation.x = -Math.PI / 2;
-                ground.position.z = -0.01;
-                ground.receiveShadow = true;
-                this.scene.add(ground);
-                
-                // Clean grid reference
-                const gridHelper = new THREE.GridHelper(1, 20, 0xddd, 0xf0f0f0);
-                gridHelper.position.z = 0;
-                this.scene.add(gridHelper);
-                
-                // Coordinate frame for reference
-                const axesHelper = new THREE.AxesHelper(0.2);
-                axesHelper.position.set(-0.5, -0.5, 0.01);
-                this.scene.add(axesHelper);
-            }
-            
-            updateRobotPose(jointAngles) {
-                // Update joint angles and apply to robot
-                this.jointAngles = jointAngles;
-                this.updateRobotVisualization();
-            }
-            
-            updateGripperState(isOpen) {
-                // For SO-101, gripper control is handled via joint slider
-                const gripperAngle = isOpen ? 30 : 0; // degrees
-                if (this.jointObjects && this.jointObjects[5]) {
-                    this.jointObjects[5].rotation.z = (gripperAngle * Math.PI) / 180;
-                }
-            }
-            
-            addObject(type = 'cube', position = { x: 0.4, y: 0, z: 0.1 }) {
-                let geometry, material, mesh, body = null;
-                
-                switch (type) {
-                    case 'sphere':
-                        geometry = new THREE.SphereGeometry(0.03, 16, 12);
-                        material = new THREE.MeshPhongMaterial({ color: 0x10b981 });
-                        break;
-                    case 'cube':
-                    default:
-                        geometry = new THREE.BoxGeometry(0.05, 0.05, 0.05);
-                        material = new THREE.MeshPhongMaterial({ color: 0xf59e0b });
-                        break;
-                }
-                
-                mesh = new THREE.Mesh(geometry, material);
-                mesh.position.set(position.x, position.y, position.z);
-                mesh.castShadow = true;
-                mesh.receiveShadow = true;
-                this.scene.add(mesh);
-                
-                // Add physics body if physics world is available
-                if (this.world) {
-                    try {
-                        const shape = type === 'sphere' ? 
-                            new CANNON.Sphere(0.03) : 
-                            new CANNON.Box(new CANNON.Vec3(0.025, 0.025, 0.025));
-                        body = new CANNON.Body({ mass: 1 });
-                        body.addShape(shape);
-                        body.position.set(position.x, position.y, position.z);
-                        this.world.add(body);
-                    } catch (error) {
-                        console.warn('Failed to add physics body for object:', error.message);
-                        body = null;
-                    }
-                }
-                
-                this.objects.push({ mesh, body });
-                
-                return { mesh, body };
-            }
-            
-            animate() {
-                // Throttle animation to prevent overload
-                const now = performance.now();
-                if (this.lastRender && now - this.lastRender < 16) { // Cap at ~60 FPS
-                    requestAnimationFrame(() => this.animate());
-                    return;
-                }
-                this.lastRender = now;
-                
-                requestAnimationFrame(() => this.animate());
-                
-                // Update controls
-                if (this.controls) {
-                    this.controls.update();
-                }
-                
-                // Render with basic frustum culling
-                this.renderer.render(this.scene, this.camera);
-            }
-            
-            onWindowResize() {
-                if (!this.canvas.clientWidth || !this.canvas.clientHeight) return;
-                
-                this.camera.aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-                this.camera.updateProjectionMatrix();
-                this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
-            }
-            
-            showError(message) {
-                if (this.loadingOverlay) {
-                    this.loadingOverlay.innerHTML = `
-                        <div class="text-center">
-                            <div class="text-red-500 mb-2">⚠️</div>
-                            <div class="text-red-300">${message}</div>
-                        </div>
-                    `;
-                }
-            }
-            
-            getRobotConfig(robotType) {
-                const configs = {
-                    'so-101': { joints: 6, name: 'SO-101' },
-                    'so-100': { joints: 5, name: 'SO-100' },
-                    'koch': { joints: 6, name: 'Koch v1.1' },
-                    'moss': { joints: 4, name: 'MOSS' }
-                };
-                return configs[robotType] || configs['so-101'];
-            }
-            
-            switchRobot(robotType) {
-                this.robotType = robotType;
-                console.log(`Switched to ${robotType} robot model`);
-                // In a full implementation, you'd reload the robot model here
-            }
-        }
+            rendererRef.current.render(sceneRef.current, camera);
+            animationRef.current = requestAnimationFrame(animate);
+          }
+        };
+        animate();
         
-        // Client-side hand tracking with MediaPipe
-        class HandTeleopTracker {
-            constructor() {
-                this.hands = null;
-                this.camera = null;
-                this.isTracking = false;
-                this.currentModel = 'mediapipe'; // 'mediapipe' or 'wilor'
-                this.analyticsVisible = false;
-                this.isBasicCamera = false; // Flag for fallback camera mode
-                this.fingertips = { thumb: null, indexPip: null, indexTip: null };
-                this.fps = 0;
-                this.frameCount = 0;
-                this.lastTime = performance.now();
-                
-                // Robot visualization
-                this.robotViz = null;
-                
-                // DOM elements
-                this.videoElement = document.getElementById('videoElement');
-                this.outputCanvas = document.getElementById('outputCanvas');
-                this.captureCanvas = document.getElementById('captureCanvas');
-                this.ctx = this.outputCanvas.getContext('2d');
-                
-                this.initializeElements();
-                this.initializeRobotVisualization();
-            }
-            
-            initializeElements() {
-                // Original elements
-                this.startBtn = document.getElementById('startCamera');
-                this.captureBtn = document.getElementById('captureBtn');
-                this.statusDiv = document.getElementById('status');
-                this.fingertipData = document.getElementById('fingertipData');
-                this.defaultState = document.getElementById('defaultState');
-                this.liveState = document.getElementById('liveState');
-                this.fpsDisplay = document.getElementById('fps');
-                
-                // Video elements (may be in collapsed panel initially)
-                this.videoElement = document.getElementById('videoElement');
-                this.outputCanvas = document.getElementById('outputCanvas');
-                this.captureCanvas = document.getElementById('captureCanvas');
-                
-                // Initialize canvas context if available
-                if (this.outputCanvas) {
-                    this.ctx = this.outputCanvas.getContext('2d');
-                }
-                
-                // Log element availability for debugging
-                console.log('Element check:', {
-                    startBtn: !!this.startBtn,
-                    videoElement: !!this.videoElement,
-                    outputCanvas: !!this.outputCanvas,
-                    captureCanvas: !!this.captureCanvas
-                });
-                
-                // New UI elements
-                this.mediapipeBtn = document.getElementById('mediapipeBtn');
-                this.wilorBtn = document.getElementById('wilorBtn');
-                this.modelStatus = document.getElementById('modelStatus');
-                this.robotSelect = document.getElementById('robotSelect');
-                this.analyticsToggle = document.getElementById('analyticsToggle');
-                this.analyticsContent = document.getElementById('analyticsContent');
-                this.analyticsChevron = document.getElementById('analyticsChevron');
-                
-                // Robot status elements
-                this.robotConnection = document.getElementById('robotConnection');
-                this.robotModel = document.getElementById('robotModel');
-                this.trackingStatus = document.getElementById('trackingStatus');
-                this.robotTrackingToggle = document.getElementById('robotTrackingToggle');
-                this.connectRobot = document.getElementById('connectRobot');
-                this.homeRobot = document.getElementById('homeRobot');
-                this.addObject = document.getElementById('addObject');
-                this.emergencyStop = document.getElementById('emergencyStop');
-                
-                // Joint elements
-                this.joints = [
-                    document.getElementById('joint0'),
-                    document.getElementById('joint1'),
-                    document.getElementById('joint2'),
-                    document.getElementById('joint3'),
-                    document.getElementById('joint4'),
-                    document.getElementById('joint5')
-                ];
-                
-                // End effector elements
-                this.endEffectorX = document.getElementById('endEffectorX');
-                this.endEffectorY = document.getElementById('endEffectorY');
-                this.endEffectorZ = document.getElementById('endEffectorZ');
-                this.gripperState = document.getElementById('gripperState');
-                
-                // Coordinate displays
-                this.thumbCoords = document.getElementById('thumbCoords');
-                this.pipCoords = document.getElementById('pipCoords');
-                this.tipCoords = document.getElementById('tipCoords');
-                
-                // Robot preview elements
-                this.robotPreview = document.getElementById('robotPreview');
-                this.robotX = document.getElementById('robotX');
-                this.robotY = document.getElementById('robotY');
-                this.robotZ = document.getElementById('robotZ');
-                this.robotGripper = document.getElementById('robotGripper');
-                
-                this.setupEventListeners();
-                this.initializeAnalyticsView();
-                
-                // Initialize robot display with default SO-101
-                this.updateJointDisplay('so-101');
-            }
-            
-            setupEventListeners() {
-                console.log('Setting up event listeners...');
-                console.log('Start button element:', this.startBtn);
-                console.log('Button ID check:', document.getElementById('startCamera'));
-                
-                // Original event listeners
-                if (this.startBtn) {
-                    console.log('Adding click listener to start button');
-                    this.startBtn.addEventListener('click', (event) => {
-                        console.log('Start button clicked! Event:', event);
-                        console.log('Button element at click time:', event.target);
-                        event.preventDefault();
-                        this.toggleTracking();
-                    });
-                    console.log('Click listener added successfully');
-                } else {
-                    console.error('Start button not found during setup!');
-                    console.log('Available elements with startCamera ID:', document.querySelectorAll('#startCamera'));
-                }
-                
-                if (this.captureBtn) {
-                    this.captureBtn.addEventListener('click', () => this.captureAndProcess());
-                }
-                
-                // Model selection
-                if (this.mediapipeBtn) {
-                    this.mediapipeBtn.addEventListener('click', () => this.switchModel('mediapipe'));
-                }
-                if (this.wilorBtn) {
-                    this.wilorBtn.addEventListener('click', () => this.switchModel('wilor'));
-                }
-                
-                // Robot selection
-                if (this.robotSelect) {
-                    this.robotSelect.addEventListener('change', (e) => this.selectRobot(e.target.value));
-                }
-                
-                // Analytics toggle
-                if (this.analyticsToggle) {
-                    this.analyticsToggle.addEventListener('click', () => this.toggleAnalytics());
-                }
-                
-                // Robot controls
-                if (this.robotTrackingToggle) {
-                    this.robotTrackingToggle.addEventListener('click', () => this.toggleTracking());
-                }
-                if (this.connectRobot) {
-                    this.connectRobot.addEventListener('click', () => this.toggleRobotConnection());
-                }
-                if (this.homeRobot) {
-                    this.homeRobot.addEventListener('click', () => this.homeRobot());
-                }
-                if (this.addObject) {
-                    this.addObject.addEventListener('click', () => this.demoMovement());
-                }
-                if (this.emergencyStop) {
-                    this.emergencyStop.addEventListener('click', () => this.emergencyStop());
-                }
-            }
-            
-            initializeAnalyticsView() {
-                // Start with analytics visible for easier testing
-                this.analyticsVisible = true;
-                this.analyticsContent.classList.remove('hidden');
-                this.analyticsChevron.style.transform = 'rotate(180deg)';
-            }
-            
-            async debugCameraAccess() {
-                console.log('=== Camera Debug Information ===');
-                
-                // Check if navigator exists
-                if (!navigator) {
-                    console.error('Navigator object not available');
-                    return;
-                }
-                
-                // Check mediaDevices support
-                if (!navigator.mediaDevices) {
-                    console.error('navigator.mediaDevices not available');
-                    console.log('This usually means:');
-                    console.log('- You are not using HTTPS (required for camera access)');
-                    console.log('- Your browser does not support modern camera APIs');
-                    return;
-                }
-                
-                // Check getUserMedia specifically
-                if (!navigator.mediaDevices.getUserMedia) {
-                    console.error('navigator.mediaDevices.getUserMedia not available');
-                    return;
-                }
-                
-                console.log('✓ Camera APIs are available');
-                
-                // Check for available devices
-                try {
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const cameras = devices.filter(device => device.kind === 'videoinput');
-                    console.log(`Found ${cameras.length} camera(s):`, cameras);
-                } catch (error) {
-                    console.error('Failed to enumerate devices:', error);
-                }
-                
-                // Check permissions if supported
-                if (navigator.permissions) {
-                    try {
-                        const permission = await navigator.permissions.query({ name: 'camera' });
-                        console.log('Camera permission state:', permission.state);
-                    } catch (error) {
-                        console.log('Could not check camera permissions:', error.message);
-                    }
-                }
-                
-                // Test basic camera access
-                try {
-                    console.log('Testing basic camera access...');
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    console.log('✓ Camera access successful');
-                    // Stop the test stream
-                    stream.getTracks().forEach(track => track.stop());
-                } catch (error) {
-                    console.error('✗ Camera access failed:', error.name, error.message);
-                    if (error.name === 'NotAllowedError') {
-                        console.log('- User denied camera permission');
-                    } else if (error.name === 'NotFoundError') {
-                        console.log('- No camera device found');
-                    } else if (error.name === 'NotReadableError') {
-                        console.log('- Camera is being used by another application');
-                    }
-                }
-                
-                console.log('=== End Camera Debug ===');
-            }
+        } catch (error) {
+          console.error('Error initializing robot:', error);
+          addToConsole('Failed to initialize robot visualization: ' + error.message);
+          setRobotInitialized(false);
+        }
+      };
 
-            async initializeRobotVisualization() {
-                try {
-                    // Wait a bit for DOM to be ready
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    
-                    this.robotViz = new RobotVisualization('robotCanvas');
-                    console.log('Robot visualization initialized');
-                    
-                    // Demo robot movements for testing
-                    setTimeout(() => {
-                        if (this.robotViz) {
-                            // Demo some joint movements
-                            this.robotViz.updateRobotPose([15, 20, -30, 0, 0, 0]);
-                            
-                            setTimeout(() => {
-                                this.robotViz.updateRobotPose([0, 0, 0, 0, 0, 0]);
-                            }, 3000);
-                        }
-                    }, 2000);
-                    
-                } catch (error) {
-                    console.error('Failed to initialize robot visualization:', error);
-                }
-            }
-            
-            switchModel(model) {
-                this.currentModel = model;
-                
-                // Update button states
-                if (model === 'mediapipe') {
-                    this.mediapipeBtn.className = 'px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white transition-colors';
-                    this.wilorBtn.className = 'px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800 transition-colors';
-                    this.modelStatus.textContent = 'Live Tracking';
-                    this.modelStatus.className = 'text-sm text-blue-600 font-medium';
-                } else {
-                    this.mediapipeBtn.className = 'px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-800 transition-colors';
-                    this.wilorBtn.className = 'px-4 py-2 text-sm font-medium rounded-md bg-purple-600 text-white transition-colors';
-                    this.modelStatus.textContent = 'High Quality';
-                    this.modelStatus.className = 'text-sm text-purple-600 font-medium';
-                }
-                
-                // Update tracking mode
-                if (this.isTracking) {
-                    if (model === 'mediapipe') {
-                        this.updateStatus('Switched to MediaPipe - Live tracking', 'blue');
-                    } else {
-                        this.updateStatus('Switched to WiLoR - Capture mode', 'purple');
-                        // Stop live tracking for WiLoR mode
-                        this.stopLiveTracking();
-                    }
-                }
-                
-                console.log(`Switched to ${model} model`);
-            }
-            
-            selectRobot(robotType) {
-                this.robotModel.textContent = robotType.toUpperCase();
-                console.log(`Selected robot: ${robotType}`);
-                
-                // Update robot status
-                this.updateStatus(`Selected ${robotType} manipulator`, 'blue');
-                
-                // Update joint display based on robot type
-                this.updateJointDisplay(robotType);
-                
-                // Update 3D robot visualization
-                if (this.robotViz) {
-                    this.robotViz.switchRobot(robotType);
-                }
-            }
-            
-            updateJointDisplay(robotType) {
-                // Hide all joints first
-                this.joints.forEach(joint => {
-                    if (joint && joint.parentElement) {
-                        joint.parentElement.style.display = 'none';
-                    }
-                });
-                
-                // Define joint configurations for different robots
-                const robotConfigs = {
-                    'so-101': { joints: 6, names: ['Base', 'Shoulder', 'Elbow', 'Wrist 1', 'Wrist 2', 'Wrist 3'] },
-                    'so-100': { joints: 5, names: ['Base', 'Shoulder', 'Elbow', 'Wrist 1', 'Wrist 2'] },
-                    'koch': { joints: 6, names: ['Base', 'Shoulder', 'Elbow', 'Wrist 1', 'Wrist 2', 'Wrist 3'] },
-                    'moss': { joints: 4, names: ['Base', 'Shoulder', 'Elbow', 'Wrist'] },
-                    'custom': { joints: 6, names: ['Joint 1', 'Joint 2', 'Joint 3', 'Joint 4', 'Joint 5', 'Joint 6'] }
+      // Handle manual joint position changes
+      const updateJointPosition = (jointIndex, value) => {
+        const newJoints = [...jointPositions];
+        newJoints[jointIndex] = parseFloat(value);
+        setJointPositions(newJoints);
+      };
+
+      const startCamera = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: 640, height: 480, facingMode: 'user' } 
+          });
+          streamRef.current = stream;
+          
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => {
+              videoRef.current.play();
+              setIsCameraActive(true);
+              addToConsole('Camera started successfully');
+              
+              // Start hand tracking
+              if (handsRef.current) {
+                const processFrame = async () => {
+                  if (videoRef.current && isCameraActive) {
+                    await handsRef.current.send({ image: videoRef.current });
+                    setTimeout(processFrame, 33); // ~30fps
+                  }
                 };
-                
-                const config = robotConfigs[robotType] || robotConfigs['so-101'];
-                
-                // Show and update labels for active joints
-                for (let i = 0; i < config.joints && i < this.joints.length; i++) {
-                    if (this.joints[i] && this.joints[i].parentElement) {
-                        const parentDiv = this.joints[i].parentElement;
-                        parentDiv.style.display = 'flex';
-                        
-                        // Update joint label
-                        const label = parentDiv.querySelector('.text-gray-600');
-                        if (label) {
-                            label.textContent = config.names[i] + ':';
-                        }
-                        
-                        // Reset joint value
-                        this.joints[i].textContent = '0.0°';
-                    }
-                }
-                
-                console.log(`Updated joint display for ${robotType}: ${config.joints} joints`);
-            }
-            
-            toggleAnalytics() {
-                this.analyticsVisible = !this.analyticsVisible;
-                
-                if (this.analyticsVisible) {
-                    this.analyticsContent.classList.remove('hidden');
-                    this.analyticsChevron.style.transform = 'rotate(180deg)';
-                } else {
-                    this.analyticsContent.classList.add('hidden');
-                    this.analyticsChevron.style.transform = 'rotate(0deg)';
-                }
-                
-                console.log(`Analytics view ${this.analyticsVisible ? 'opened' : 'closed'}`);
-            }
-            
-            toggleRobotConnection() {
-                const isActive = this.robotConnection.textContent === 'Active';
-                
-                if (isActive) {
-                    // Disable hand control
-                    this.robotConnection.textContent = 'Inactive';
-                    this.robotConnection.className = 'font-medium text-red-600';
-                    this.connectRobot.textContent = 'Enable Hand Control';
-                    this.connectRobot.className = 'w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors';
-                    this.updateStatus('Hand control disabled', 'red');
-                } else {
-                    // Enable hand control
-                    this.robotConnection.textContent = 'Active';
-                    this.robotConnection.className = 'font-medium text-green-600';
-                    this.connectRobot.textContent = 'Disable Hand Control';
-                    this.connectRobot.className = 'w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors';
-                    this.updateStatus('Hand control enabled', 'green');
-                }
-            }
-            
-            updateJointPositions(angles) {
-                // Update joint display with new angles
-                angles.forEach((angle, index) => {
-                    if (this.joints[index]) {
-                        this.joints[index].textContent = `${angle.toFixed(1)}°`;
-                    }
-                });
-                
-                // Update 3D robot visualization
-                if (this.robotViz) {
-                    this.robotViz.updateRobotPose(angles);
-                }
-            }
-            
-            updateEndEffectorPosition(x, y, z, gripper) {
-                this.endEffectorX.textContent = `${x.toFixed(3)} m`;
-                this.endEffectorY.textContent = `${y.toFixed(3)} m`;
-                this.endEffectorZ.textContent = `${z.toFixed(3)} m`;
-                this.gripperState.textContent = gripper;
-                
-                // Update 3D robot gripper
-                if (this.robotViz) {
-                    this.robotViz.updateGripperState(gripper === 'Open');
-                }
-            }
-            
-            stopLiveTracking() {
-                // Stop MediaPipe live tracking when switching to WiLoR
-                if (this.camera && this.currentModel === 'wilor') {
-                    // Keep camera running but stop MediaPipe processing
-                    console.log('Paused live tracking for WiLoR mode');
-                }
-            }
-            
-            async initializeMediaPipe() {
-                try {
-                    // Check if MediaPipe is loaded
-                    if (typeof Hands === 'undefined' || typeof Camera === 'undefined') {
-                        console.error('MediaPipe not loaded. Trying to use basic camera...');
-                        return await this.initializeBasicCamera();
-                    }
-                    
-                    // Initialize MediaPipe Hands
-                    this.hands = new Hands({
-                        locateFile: (file) => {
-                            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-                        }
-                    });
-                    
-                    this.hands.setOptions({
-                        maxNumHands: 1,
-                        modelComplexity: 1,
-                        minDetectionConfidence: 0.5,
-                        minTrackingConfidence: 0.5
-                    });
-                    
-                    this.hands.onResults((results) => this.onResults(results));
-                    
-                    // Initialize camera with throttled processing
-                    this.camera = new Camera(this.videoElement, {
-                        onFrame: async () => {
-                            // Throttle MediaPipe processing to prevent overload
-                            const now = performance.now();
-                            if (this.lastMediaPipeCall && now - this.lastMediaPipeCall < 100) { // Max 10 FPS for MediaPipe
-                                return;
-                            }
-                            this.lastMediaPipeCall = now;
-                            
-                            if (this.isTracking && this.hands) {
-                                await this.hands.send({ image: this.videoElement });
-                            }
-                        },
-                        width: 640,
-                        height: 480
-                    });
-                    
-                    return true;
-                } catch (error) {
-                    console.error('MediaPipe initialization failed:', error);
-                    console.log('Falling back to basic camera...');
-                    return await this.initializeBasicCamera();
-                }
-            }
-            
-            async initializeBasicCamera() {
-                try {
-                    // Check if getUserMedia is available
-                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        throw new Error('Camera API not available. Try using HTTPS or a different browser.');
-                    }
+                processFrame();
+              }
+            };
+          }
+        } catch (error) {
+          console.error("Camera access denied:", error);
+          addToConsole('Camera access denied');
+          alert("Camera access is required for hand tracking");
+        }
+      };
 
-                    // Check current permission state
-                    if (navigator.permissions) {
-                        try {
-                            const permission = await navigator.permissions.query({name: 'camera'});
-                            console.log('Camera permission state:', permission.state);
-                            
-                            if (permission.state === 'denied') {
-                                throw new Error('Camera permission denied. Please allow camera access in browser settings.');
-                            }
-                        } catch (permError) {
-                            console.log('Permission API not supported, continuing with camera request...');
-                        }
-                    }
+      const stopCamera = () => {
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+          streamRef.current = null;
+        }
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
+        }
+        setIsCameraActive(false);
+        setIsTracking(false);
+        addToConsole('Camera stopped');
+        
+        // Clear canvas
+        if (canvasRef.current) {
+          const ctx = canvasRef.current.getContext('2d');
+          ctx.clearRect(0, 0, 640, 480);
+        }
+      };
 
-                    // Try different camera configurations
-                    const configs = [
-                        { video: { width: 640, height: 480, facingMode: 'user' } },
-                        { video: { width: 640, height: 480 } },
-                        { video: true },
-                        { video: { deviceId: 'default' } }
-                    ];
+      const connectToRobot = () => {
+        try {
+          addToConsole(`Connecting to robot: ${selectedRobot}`);
+          setIsConnected(true);
+          addToConsole('Robot connected successfully');
+        } catch (error) {
+          console.error('Connection error:', error);
+          addToConsole('Connection error: ' + error.message);
+        }
+      };
 
-                    let stream = null;
-                    let lastError = null;
+      return (
+        <div className="min-h-screen bg-gray-900 text-white">
+          <header className="fixed top-0 left-0 right-0 z-50 border-b bg-gray-800/70 backdrop-blur-glass border-gray-700/50">
+            <div className="max-w-4xl mx-auto px-6 py-4 flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center hover:bg-orange-600 transition-colors">
+                  <span className="text-white font-bold text-lg">JP</span>
+                </div>
+              </div>
+              <div className="flex items-center space-x-6">
+                <a href="/" className="flex items-center space-x-2 text-sm font-medium text-gray-300 hover:text-orange-500 transition-colors">
+                  <span>&larr;</span>
+                  <span>Back to Home</span>
+                </a>
+              </div>
+            </div>
+          </header>
+          <div className="pt-20 px-6 max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <h1 className="text-4xl font-bold mb-4 text-white">Hand Teleop System</h1>
+              <p className="text-xl text-gray-300 max-w-2xl mx-auto">Control robots with natural hand movements</p>
+            </div>
+            <div className="grid lg:grid-cols-2 gap-6 mb-8">
+              <div className="bg-gray-800 border-gray-700 p-6 rounded-xl">
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="inline-block"><svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M2 7V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2"/></svg></span>
+                  <h2 className="text-xl font-semibold text-white">Robot</h2>
+                  <span className={`ml-auto px-2 py-1 rounded text-xs ${isConnected ? 'bg-green-500' : 'bg-gray-600'}`}>{isConnected ? 'Connected' : 'Disconnected'}</span>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-white">Robot Embodiment</label>
+                    <select value={selectedRobot} onChange={e => setSelectedRobot(e.target.value)} className="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white">
+                      {ROBOTS.map(robot => (
+                        <option key={robot.id} value={robot.id} className="bg-gray-800 text-white">{robot.name} ({robot.dof} DOF)</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div ref={robotContainerRef} className="aspect-square bg-gray-900 rounded-lg border-2 border-dashed border-gray-600 relative overflow-hidden flex items-center justify-center">
+                    {!robotInitialized && <span className="text-gray-400">Initializing robot visualization...</span>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      className={`px-4 py-2 rounded ${isConnected ? 'bg-gray-700' : 'bg-orange-500'} text-white`} 
+                      onClick={connectToRobot} 
+                      disabled={isConnected}
+                    >
+                      {isConnected ? 'Connected' : 'Connect'}
+                    </button>
+                    <button 
+                      className={`px-4 py-2 rounded ${isTracking ? 'bg-gray-700' : 'bg-orange-500'} text-white`} 
+                      onClick={() => setIsTracking(!isTracking)} 
+                      disabled={!isConnected || !isCameraActive}
+                    >
+                      {isTracking ? 'Stop Control' : 'Start Control'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-800 border-gray-700 p-6 rounded-xl">
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="inline-block"><svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6"/></svg></span>
+                  <h2 className="text-xl font-semibold text-white">Camera Feed</h2>
+                  <span className={`ml-auto px-2 py-1 rounded text-xs ${isCameraActive ? 'bg-green-500' : 'bg-gray-600'}`}>{isCameraActive ? 'Active' : 'Inactive'}</span>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex gap-2">
+                    <button 
+                      className={`flex-1 px-4 py-2 rounded ${isCameraActive ? 'bg-gray-700' : 'bg-orange-500'} text-white`} 
+                      onClick={startCamera} 
+                      disabled={isCameraActive}
+                    >
+                      {isCameraActive ? 'Camera Active' : 'Start Camera'}
+                    </button>
+                    <button 
+                      className="flex-1 px-4 py-2 rounded bg-gray-700 text-white" 
+                      onClick={stopCamera} 
+                      disabled={!isCameraActive}
+                    >
+                      Stop
+                    </button>
+                  </div>
+                  <div className="bg-gray-900 rounded-lg overflow-hidden aspect-video relative">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                      style={{ display: isCameraActive ? 'block' : 'none' }}
+                    />
+                    <canvas
+                      ref={canvasRef}
+                      width="640"
+                      height="480"
+                      className="absolute top-0 left-0 w-full h-full"
+                      style={{ display: isCameraActive ? 'block' : 'none' }}
+                    />
+                    {!isCameraActive && (
+                      <div className="w-full h-full flex items-center justify-center text-gray-400">
+                        <div className="text-center">
+                          <span className="text-gray-400">Camera feed will appear here</span>
+                          <p className="text-sm text-gray-400 mt-2">Grant camera access to start tracking</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-800 border-gray-700 rounded-xl overflow-hidden mt-8">
+              <button onClick={() => setShowAnalytics(!showAnalytics)} className="w-full p-6 text-left flex items-center justify-between hover:bg-gray-700/50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block"><svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+                  <h2 className="text-xl font-semibold text-white">Analytics & Debug Info</h2>
+                </div>
+                <span>{showAnalytics ? '▲' : '▼'}</span>
+              </button>
+              {showAnalytics && (
+                <div className="px-6 pb-6 border-t border-gray-700">
+                  <div className="grid md:grid-cols-2 gap-6 mt-6">
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-white">Hand Tracking Model</label>
+                      <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)} className="w-full p-2 bg-gray-800 border border-gray-600 rounded-lg text-white">
+                        {HAND_MODELS.map(model => (
+                          <option key={model.id} value={model.id} className="bg-gray-800 text-white">{model.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <h3 className="font-medium mb-2 flex items-center gap-2 text-white">Hand Tracking</h3>
+                      <div className="text-xs font-mono text-gray-300 space-y-1">
+                        {fingertipData.thumb && fingertipData.indexTip ? (
+                          <>
+                            <div>Thumb: ({fingertipData.thumb.x.toFixed(1)}, {fingertipData.thumb.y.toFixed(1)}, {fingertipData.thumb.z.toFixed(3)})</div>
+                            <div>Index: ({fingertipData.indexTip.x.toFixed(1)}, {fingertipData.indexTip.y.toFixed(1)}, {fingertipData.indexTip.z.toFixed(3)})</div>
+                            <div>Updated: {new Date(fingertipData.timestamp).toLocaleTimeString()}</div>
+                          </>
+                        ) : (
+                          <div>No hand detected</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <h3 className="font-medium mb-4 flex items-center gap-2 text-white">Robot Joint Control</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        {jointPositions.map((position, index) => (
+                          <div key={index} className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-300">
+                              Joint {index + 1}: {position.toFixed(2)}°
+                            </label>
+                            <input
+                              type="range"
+                              min={index === 5 ? "-50" : "-180"}
+                              max={index === 5 ? "50" : "180"}
+                              step="0.1"
+                              value={position}
+                              onChange={(e) => updateJointPosition(index, e.target.value)}
+                              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                              style={{
+                                background: `linear-gradient(to right, #f97316 0%, #f97316 ${((position - (index === 5 ? -50 : -180)) / (index === 5 ? 100 : 360)) * 100}%, #374151 ${((position - (index === 5 ? -50 : -180)) / (index === 5 ? 100 : 360)) * 100}%, #374151 100%)`
+                              }}
+                            />
+                            <div className="flex justify-between text-xs text-gray-500">
+                              <span>{index === 5 ? "-50°" : "-180°"}</span>
+                              <span>{index === 5 ? "+50°" : "+180°"}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-4 p-3 bg-gray-800 rounded-lg">
+                        <div className="text-xs font-mono text-gray-300 space-y-1">
+                          <div className="text-sm font-medium text-white mb-2">Current Joint States:</div>
+                          {jointPositions.map((position, index) => (
+                            <div key={index}>J{index + 1}: {position.toFixed(3)}° ({(position * Math.PI / 180).toFixed(3)} rad)</div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="font-medium mb-2 flex items-center gap-2 text-white">API Status</h3>
+                      <div className="text-sm font-medium mb-2 text-yellow-400">⏳ Checking...</div>
+                      <button 
+                        className="px-3 py-1 rounded border border-gray-600 text-gray-300 hover:border-orange-500 hover:text-orange-500"
+                        onClick={() => window.open(`${API_BASE}/docs`, '_blank')}
+                      >
+                        API Docs
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium flex items-center gap-2 text-white">Output Console</h3>
+                      <button className="px-2 py-1 rounded border border-gray-600 text-gray-300 hover:border-orange-500 hover:text-orange-500" onClick={() => setConsoleLogs([])}>Clear</button>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-600 rounded-lg p-3 h-32 overflow-y-auto">
+                      <div className="text-gray-400 text-xs">Console output will appear here...</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="mt-8 text-center">
+              <div className="flex flex-wrap justify-center gap-4">
+                <a href="#" className="px-4 py-2 rounded border border-gray-600 text-gray-300 hover:border-orange-500 hover:text-orange-500">Full Demo</a>
+                <a href="https://github.com/7jep7/human2robot" className="px-4 py-2 rounded border border-gray-600 text-gray-300 hover:border-orange-500 hover:text-orange-500">GitHub</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
-                    for (const config of configs) {
-                        try {
-                            console.log('Trying camera config:', config);
-                            stream = await navigator.mediaDevices.getUserMedia(config);
-                            console.log('Camera access successful with config:', config);
-                            break;
-                        } catch (error) {
-                            console.log('Camera config failed:', config, 'Error:', error.message);
-                            lastError = error;
-                        }
-                    }
+    // Error boundary component
+    class ErrorBoundary extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+      }
 
-                    if (!stream) {
-                        throw lastError || new Error('All camera configurations failed');
-                    }
-                    
-                    this.videoElement.srcObject = stream;
-                    this.isBasicCamera = true;
-                    
-                    // Wait for video to be ready
-                    return new Promise((resolve) => {
-                        this.videoElement.onloadedmetadata = () => {
-                            console.log('Basic camera initialized successfully');
-                            resolve(true);
-                        };
-                        this.videoElement.onerror = () => {
-                            console.error('Video element error');
-                            resolve(false);
-                        };
-                    });
-                    
-                } catch (error) {
-                    console.error('Basic camera initialization failed:', error);
-                    
-                    // Provide specific error messages
-                    let errorMessage = 'Camera access failed: ';
-                    if (error.name === 'NotAllowedError') {
-                        errorMessage += 'Permission denied. Please allow camera access and refresh the page.';
-                    } else if (error.name === 'NotFoundError') {
-                        errorMessage += 'No camera found. Please connect a camera and refresh the page.';
-                    } else if (error.name === 'NotReadableError') {
-                        errorMessage += 'Camera is busy or hardware error. Try disconnecting/reconnecting your external display.';
-                    } else if (error.name === 'OverconstrainedError') {
-                        errorMessage += 'Camera settings not supported. Try a different camera.';
-                    } else {
-                        errorMessage += error.message;
-                    }
-                    
-                    this.updateStatus('❌ ' + errorMessage, 'red');
-                    return false;
-                }
-            }
-            
-            async toggleTracking() {
-                console.log('toggleTracking called, isTracking:', this.isTracking);
-                console.log('Current analytics visibility:', this.analyticsVisible);
-                console.log('Video element available:', !!this.videoElement);
-                
-                if (!this.isTracking) {
-                    await this.startTracking();
-                } else {
-                    this.stopTracking();
-                }
-            }
-            
-            async startTracking() {
-                // Ensure analytics panel is open so camera elements are accessible
-                if (!this.analyticsVisible) {
-                    this.showAnalytics();
-                    // Give the UI a moment to render the panel
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                }
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error: error };
+      }
 
-                // Debug camera availability
-                await this.debugCameraAccess();
-                
-                this.updateStatus('Initializing camera...', 'blue');
-                
-                // Refresh video elements after panel is open
-                this.refreshVideoElements();
-                
-                // Check if video element is accessible
-                if (!this.videoElement) {
-                    console.error('Video element not found after refresh!');
-                    this.updateStatus('❌ Video element not found', 'red');
-                    return;
-                }
-                
-                if (!this.hands && !this.isBasicCamera && !(await this.initializeMediaPipe())) {
-                    this.updateStatus('❌ Failed to initialize camera', 'red');
-                    return;
-                }
-                
-                try {
-                    if (this.camera && this.camera.start) {
-                        // MediaPipe camera
-                        await this.camera.start();
-                    } else if (this.isBasicCamera) {
-                        // Basic camera already initialized
-                        console.log('Using basic camera (already initialized)');
-                    } else {
-                        throw new Error('No camera available');
-                    }
-                    
-                    this.isTracking = true;
-                    
-                    // Update UI buttons (both analytics and robot panel)
-                    this.startBtn.textContent = 'Stop Tracking';
-                    this.startBtn.className = 'w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn';
-                    
-                    if (this.robotTrackingToggle) {
-                        this.robotTrackingToggle.textContent = 'Stop Hand Tracking';
-                        this.robotTrackingToggle.className = 'w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors';
-                    }
-                    
-                    this.captureBtn.disabled = false;
-                    
-                    if (this.fingertipData) this.fingertipData.classList.remove('hidden');
-                    if (this.defaultState) this.defaultState.classList.add('hidden');
-                    if (this.liveState) this.liveState.classList.remove('hidden');
-                    if (this.robotPreview) this.robotPreview.classList.remove('hidden');
-                    
-                    // Update tracking status display
-                    if (this.trackingStatus) {
-                        this.trackingStatus.textContent = 'Active';
-                        this.trackingStatus.className = 'font-medium text-green-600';
-                    }
-                    
-                    if (this.hands) {
-                        this.updateStatus('✅ MediaPipe tracking active', 'green');
-                    } else {
-                        this.updateStatus('✅ Basic camera active (MediaPipe unavailable)', 'blue');
-                        // Start a basic demo for visual feedback
-                        this.startBasicDemo();
-                    }
-                    
-                    // Start FPS counter
-                    this.startFPSCounter();
-                    
-                } catch (error) {
-                    console.error('Error starting camera:', error);
-                    this.updateStatus('❌ Could not access camera: ' + error.message, 'red');
-                }
-            }
-            
-            showAnalytics() {
-                this.analyticsVisible = true;
-                if (this.analyticsContent) {
-                    this.analyticsContent.classList.remove('hidden');
-                    console.log('Analytics content visibility toggled, hidden class removed');
-                }
-                if (this.analyticsChevron) {
-                    this.analyticsChevron.style.transform = 'rotate(180deg)';
-                }
-                
-                // Force a reflow to ensure panel is rendered
-                if (this.analyticsContent) {
-                    this.analyticsContent.offsetHeight;
-                }
-                
-                console.log('Analytics panel opened, forcing video element refresh');
-            }
-            
-            refreshVideoElements() {
-                // Re-get video elements in case they weren't accessible before
-                if (!this.videoElement) {
-                    this.videoElement = document.getElementById('videoElement');
-                }
-                if (!this.outputCanvas) {
-                    this.outputCanvas = document.getElementById('outputCanvas');
-                }
-                if (!this.captureCanvas) {
-                    this.captureCanvas = document.getElementById('captureCanvas');
-                }
-                
-                // Initialize canvas context if now available
-                if (this.outputCanvas && !this.ctx) {
-                    this.ctx = this.outputCanvas.getContext('2d');
-                }
-                
-                console.log('Video elements refreshed:', {
-                    videoElement: !!this.videoElement,
-                    outputCanvas: !!this.outputCanvas,
-                    captureCanvas: !!this.captureCanvas,
-                    ctx: !!this.ctx
-                });
-            }
-            
-            startBasicDemo() {
-                // Simple demo animation when MediaPipe isn't available
-                if (!this.isTracking) return;
-                
-                const time = performance.now() * 0.001;
-                
-                // Simulate hand tracking for demo purposes
-                this.fingertips = {
-                    thumb: { x: 200 + Math.sin(time) * 50, y: 150 + Math.cos(time) * 30, z: 0.3 },
-                    indexPip: { x: 250 + Math.sin(time + 1) * 40, y: 180 + Math.cos(time + 1) * 25, z: 0.35 },
-                    indexTip: { x: 300 + Math.sin(time + 2) * 60, y: 160 + Math.cos(time + 2) * 35, z: 0.25 }
-                };
-                
-                this.updateCoordinateDisplays();
-                this.updateRobotMapping();
-                this.updateFPS();
-                
-                setTimeout(() => this.startBasicDemo(), 33); // ~30 FPS
-            }
-            
-            stopTracking() {
-                this.isTracking = false;
-                
-                if (this.camera) {
-                    this.camera.stop();
-                }
-                
-                // Clear canvas
-                this.ctx.clearRect(0, 0, this.outputCanvas.width, this.outputCanvas.height);
-                
-                // Update UI buttons (both analytics and robot panel)
-                this.startBtn.textContent = 'Start Live Tracking';
-                this.startBtn.className = 'w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg capture-btn';
-                
-                if (this.robotTrackingToggle) {
-                    this.robotTrackingToggle.textContent = 'Start Hand Tracking';
-                    this.robotTrackingToggle.className = 'w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors';
-                }
-                
-                this.captureBtn.disabled = true;
-                
-                this.fingertipData.classList.add('hidden');
-                this.liveState.classList.add('hidden');
-                this.defaultState.classList.remove('hidden');
-                this.robotPreview.classList.add('hidden');
-                
-                this.updateStatus('Tracking stopped', 'blue');
-                
-                // Update tracking status display  
-                if (this.trackingStatus) {
-                    this.trackingStatus.textContent = 'Stopped';
-                    this.trackingStatus.className = 'font-medium text-gray-600';
-                }
-            }
-            
-            onResults(results) {
-                if (!this.isTracking) return;
-                
-                // Throttle UI updates to prevent excessive DOM manipulation
-                const now = performance.now();
-                if (this.lastUIUpdate && now - this.lastUIUpdate < 50) { // Max 20 FPS for UI updates
-                    return;
-                }
-                this.lastUIUpdate = now;
-                
-                // Update canvas size only when needed
-                if (this.outputCanvas.width !== this.videoElement.videoWidth ||
-                    this.outputCanvas.height !== this.videoElement.videoHeight) {
-                    this.outputCanvas.width = this.videoElement.videoWidth;
-                    this.outputCanvas.height = this.videoElement.videoHeight;
-                }
-                
-                // Clear previous drawings
-                this.ctx.clearRect(0, 0, this.outputCanvas.width, this.outputCanvas.height);
-                
-                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                    const landmarks = results.multiHandLandmarks[0];
-                    
-                    // Extract our MVP fingertips (MediaPipe landmark indices)
-                    // 4 = thumb tip, 6 = index PIP, 8 = index tip
-                    const thumbTip = landmarks[4];
-                    const indexPip = landmarks[6];
-                    const indexTip = landmarks[8];
-                    
-                    // Convert to pixel coordinates
-                    const w = this.outputCanvas.width;
-                    const h = this.outputCanvas.height;
-                    
-                    this.fingertips = {
-                        thumb: { x: thumbTip.x * w, y: thumbTip.y * h, z: thumbTip.z },
-                        indexPip: { x: indexPip.x * w, y: indexPip.y * h, z: indexPip.z },
-                        indexTip: { x: indexTip.x * w, y: indexTip.y * h, z: indexTip.z }
-                    };
-                    
-                    // Draw fingertips
-                    this.drawFingertips();
-                    
-                    // Update displays (throttled)
-                    this.updateCoordinateDisplays();
-                    this.updateRobotMapping();
-                    
-                } else {
-                    // No hand detected
-                    this.fingertips = { thumb: null, indexPip: null, indexTip: null };
-                    this.updateCoordinateDisplays();
-                }
-                
-                this.updateFPS();
-            }
-            
-            drawFingertips() {
-                const { thumb, indexPip, indexTip } = this.fingertips;
-                
-                // Draw connections
-                this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-                this.ctx.lineWidth = 2;
-                this.ctx.beginPath();
-                this.ctx.moveTo(indexPip.x, indexPip.y);
-                this.ctx.lineTo(indexTip.x, indexTip.y);
-                this.ctx.stroke();
-                
-                // Draw fingertip points
-                this.drawPoint(thumb.x, thumb.y, '#FCD34D', 8); // Yellow - thumb
-                this.drawPoint(indexPip.x, indexPip.y, '#3B82F6', 6); // Blue - PIP
-                this.drawPoint(indexTip.x, indexTip.y, '#EF4444', 8); // Red - tip
-                
-                // Draw labels
-                this.ctx.fillStyle = 'white';
-                this.ctx.font = 'bold 12px sans-serif';
-                this.ctx.fillText('T', thumb.x - 6, thumb.y + 4);
-                this.ctx.fillText('P', indexPip.x - 6, indexPip.y + 4);
-                this.ctx.fillText('I', indexTip.x - 6, indexTip.y + 4);
-            }
-            
-            drawPoint(x, y, color, size = 6) {
-                this.ctx.fillStyle = color;
-                this.ctx.beginPath();
-                this.ctx.arc(x, y, size, 0, 2 * Math.PI);
-                this.ctx.fill();
-                
-                // White border
-                this.ctx.strokeStyle = 'white';
-                this.ctx.lineWidth = 2;
-                this.ctx.stroke();
-            }
-            
-            updateCoordinateDisplays() {
-                const { thumb, indexPip, indexTip } = this.fingertips;
-                
-                this.thumbCoords.textContent = thumb ? 
-                    `(${Math.round(thumb.x)}, ${Math.round(thumb.y)})` : 'Not detected';
-                this.pipCoords.textContent = indexPip ? 
-                    `(${Math.round(indexPip.x)}, ${Math.round(indexPip.y)})` : 'Not detected';
-                this.tipCoords.textContent = indexTip ? 
-                    `(${Math.round(indexTip.x)}, ${Math.round(indexTip.y)})` : 'Not detected';
-            }
-            
-            updateRobotMapping() {
-                const { thumb, indexPip, indexTip } = this.fingertips;
-                
-                if (thumb && indexPip && indexTip) {
-                    // Simple mapping for robot control preview
-                    const x = ((indexTip.x / this.outputCanvas.width) - 0.5) * 2; // -1 to 1
-                    const y = ((indexTip.y / this.outputCanvas.height) - 0.5) * -2; // -1 to 1 (inverted Y)
-                    const z = Math.max(0, indexTip.z * 2); // 0 to 2
-                    
-                    // Gripper control based on thumb-index distance
-                    const distance = Math.sqrt(
-                        Math.pow(thumb.x - indexTip.x, 2) + 
-                        Math.pow(thumb.y - indexTip.y, 2)
-                    );
-                    const gripper = distance < 50 ? 'Closed' : 'Open';
-                    
-                    // Update robot preview (in analytics)
-                    if (this.robotX) {
-                        this.robotX.textContent = x.toFixed(2);
-                        this.robotY.textContent = y.toFixed(2);
-                        this.robotZ.textContent = z.toFixed(2);
-                        this.robotGripper.textContent = gripper;
-                    }
-                    
-                    // Update main robot display
-                    this.updateEndEffectorPosition(x * 0.5, y * 0.5, z * 0.3, gripper);
-                    
-                    // Generate joint angles (simple IK approximation)
-                    const jointAngles = this.calculateJointAngles(x, y, z);
-                    this.updateJointPositions(jointAngles);
-                    
-                } else {
-                    // No hand detected - reset to neutral position
-                    if (this.robotX) {
-                        this.robotX.textContent = '0.0';
-                        this.robotY.textContent = '0.0';
-                        this.robotZ.textContent = '0.0';
-                        this.robotGripper.textContent = 'Open';
-                    }
-                    this.updateEndEffectorPosition(0, 0, 0, 'Open');
-                    this.updateJointPositions([0, 0, 0, 0, 0, 0]);
-                }
-            }
-            
-            calculateJointAngles(x, y, z) {
-                // Simple inverse kinematics approximation for 6-DOF arm
-                // This is a simplified version - real IK would be more complex
-                const baseRotation = Math.atan2(y, x) * 180 / Math.PI;
-                const shoulderAngle = Math.atan2(z, Math.sqrt(x*x + y*y)) * 180 / Math.PI;
-                const elbowAngle = -shoulderAngle * 1.5; // Simple relationship
-                const wrist1 = shoulderAngle * 0.5;
-                const wrist2 = 0; // Keep straight for simplicity
-                const wrist3 = baseRotation * 0.3;
-                
-                return [baseRotation, shoulderAngle, elbowAngle, wrist1, wrist2, wrist3];
-            }
-            
-            startFPSCounter() {
-                this.frameCount = 0;
-                this.lastTime = performance.now();
-            }
-            
-            updateFPS() {
-                this.frameCount++;
-                const now = performance.now();
-                if (now - this.lastTime >= 1000) {
-                    this.fps = Math.round(this.frameCount * 1000 / (now - this.lastTime));
-                    this.fpsDisplay.textContent = `${this.fps} FPS`;
-                    this.frameCount = 0;
-                    this.lastTime = now;
-                }
-            }
-            
-            async captureAndProcess() {
-                // Keep the original WiLoR functionality with reduced frequency
-                if (!this.isTracking) return;
-                
-                // Throttle API calls to prevent overload
-                const now = performance.now();
-                if (this.lastAPICall && now - this.lastAPICall < 500) { // Max 2 calls per second
-                    return;
-                }
-                this.lastAPICall = now;
-                
-                this.updateStatus('Processing with WiLoR...', 'orange');
-                
-                try {
-                    // Capture current frame
-                    const canvas = this.captureCanvas;
-                    const context = canvas.getContext('2d');
-                    
-                    canvas.width = this.videoElement.videoWidth;
-                    canvas.height = this.videoElement.videoHeight;
-                    context.drawImage(this.videoElement, 0, 0);
-                    
-                    // Convert to blob with reduced quality for faster processing
-                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.6));
-                    
-                    // Create form data
-                    const formData = new FormData();
-                    formData.append('file', blob, 'capture.jpg');
-                    
-                    // Send to API with timeout for faster feedback
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 1500); // Reduced timeout
-                    
-                    const response = await fetch('/api/track', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            image_data: canvas.toDataURL('image/jpeg', 0.6), // Reduced quality
-                            robot_type: 'so101',
-                            tracking_mode: 'wilor'
-                        }),
-                        signal: controller.signal
-                    });
-                    
-                    clearTimeout(timeoutId);
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        this.updateStatus('✅ WiLoR processing complete!', 'green');
-                        // Handle WiLoR results...
-                    } else {
-                        this.updateStatus('❌ No hand detected in WiLoR', 'red');
-                    }
-                    
-                } catch (error) {
-                    if (error.name === 'AbortError') {
-                        console.log('WiLoR backend request timed out');
-                        this.updateStatus('⚠️ WiLoR backend unavailable - using live tracking', 'orange');
-                    } else {
-                        console.log('WiLoR backend not available:', error.message);
-                        this.updateStatus('📱 WiLoR offline - live tracking active', 'blue');
-                    }
-                }
-            }
-            
-            demoMovement() {
-                if (!this.robotViz) {
-                    this.updateStatus('Robot visualization not available', 'red');
-                    return;
-                }
-                
-                this.updateStatus('Running demo movement sequence...', 'blue');
-                
-                // Demo sequence: move through various joint positions
-                const demoSequence = [
-                    [0, 0, 0, 0, 0, 0],      // Home
-                    [30, 45, -90, 0, 45, 0], // Position 1
-                    [-45, 30, -60, 90, 0, 180], // Position 2
-                    [60, -30, 45, -45, 90, -90], // Position 3
-                    [0, 0, 0, 0, 0, 0]       // Back to home
-                ];
-                
-                let step = 0;
-                const moveNext = () => {
-                    if (step < demoSequence.length) {
-                        const angles = demoSequence[step];
-                        this.robotViz.updateRobotPose(angles);
-                        this.updateJointPositions(angles);
-                        
-                        step++;
-                        setTimeout(moveNext, 1500); // 1.5 second intervals
-                    } else {
-                        this.updateStatus('Demo movement complete', 'green');
-                    }
-                };
-                
-                moveNext();
-            }
-            
-            updateStatus(message, color) {
-                this.statusDiv.textContent = message;
-                this.statusDiv.className = 'text-center p-3 rounded-lg';
-                
-                switch(color) {
-                    case 'green':
-                        this.statusDiv.classList.add('bg-green-50', 'text-green-700');
-                        break;
-                    case 'red':
-                        this.statusDiv.classList.add('bg-red-50', 'text-red-700');
-                        break;
-                    case 'orange':
-                        this.statusDiv.classList.add('bg-orange-50', 'text-orange-700');
-                        break;
-                    default:
-                        this.statusDiv.classList.add('bg-blue-50', 'text-blue-700');
-                }
-            }
+      componentDidCatch(error, errorInfo) {
+        console.error('React Error:', error, errorInfo);
+      }
+
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+              <div className="text-center">
+                <h1 className="text-2xl font-bold mb-4">Something went wrong</h1>
+                <p className="text-gray-400 mb-4">Error: {this.state.error?.message}</p>
+                <button 
+                  onClick={() => window.location.reload()} 
+                  className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
+                >
+                  Reload Page
+                </button>
+              </div>
+            </div>
+          );
         }
 
-        // Initialize when DOM is loaded
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log('DOM loaded, initializing hand tracker...');
-            try {
-                window.handTracker = new HandTeleopTracker();
-                console.log('Hand tracker initialized successfully:', window.handTracker);
-                console.log('Toggle tracking method:', typeof window.handTracker.toggleTracking);
-                
-                // Test button functionality
-                console.log('Start button element:', document.getElementById('startCamera'));
-                
-                // Double-check event listener setup
-                const startBtn = document.getElementById('startCamera');
-                if (startBtn) {
-                    console.log('Button found, adding additional click listener...');
-                    startBtn.addEventListener('click', function() {
-                        console.log('Secondary click listener fired!');
-                    });
-                }
-            } catch (error) {
-                console.error('Error initializing hand tracker:', error);
-            }
-        });
+        return this.props.children;
+      }
+    }
 
-        // Cleanup on page unload
-        window.addEventListener('beforeunload', () => {
-            if (window.handTracker && window.handTracker.camera) {
-                window.handTracker.camera.stop();
-            }
-        });
-    </script>
+    ReactDOM.render(
+      <ErrorBoundary>
+        <HandTeleopDemo />
+      </ErrorBoundary>, 
+      document.getElementById('root')
+    );
+  </script>
 </body>
 </html>

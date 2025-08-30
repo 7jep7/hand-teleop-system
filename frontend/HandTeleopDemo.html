@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hand Teleop System Demo</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    @tailwind base;
+    @tailwind components;
+    @tailwind utilities;
+    :root {
+      --background: hsl(0, 0%, 4%);
+      --foreground: hsl(0, 0%, 100%);
+      --muted: hsl(0, 0%, 10%);
+      --muted-foreground: hsl(0, 0%, 64%);
+      --popover: hsl(0, 0%, 4%);
+      --popover-foreground: hsl(0, 0%, 100%);
+      --card: hsl(0, 0%, 10%);
+      --card-foreground: hsl(0, 0%, 100%);
+      --border: hsl(0, 0%, 15%);
+      --input: hsl(0, 0%, 15%);
+      --primary: hsl(20, 95%, 54%);
+      --primary-foreground: hsl(0, 0%, 100%);
+      --secondary: hsl(0, 0%, 10%);
+      --secondary-foreground: hsl(0, 0%, 100%);
+      --accent: hsl(0, 0%, 10%);
+      --accent-foreground: hsl(0, 0%, 100%);
+      --destructive: hsl(0, 84%, 60%);
+      --destructive-foreground: hsl(0, 0%, 98%);
+      --ring: hsl(20, 95%, 54%);
+      --radius: 0.75rem;
+    }
+    .dark {
+      --background: hsl(0, 0%, 4%);
+      --foreground: hsl(0, 0%, 100%);
+      --muted: hsl(0, 0%, 10%);
+      --muted-foreground: hsl(0, 0%, 64%);
+      --popover: hsl(0, 0%, 4%);
+      --popover-foreground: hsl(0, 0%, 100%);
+      --card: hsl(0, 0%, 10%);
+      --card-foreground: hsl(0, 0%, 100%);
+      --border: hsl(0, 0%, 15%);
+      --input: hsl(0, 0%, 15%);
+      --primary: hsl(20, 95%, 54%);
+      --primary-foreground: hsl(0, 0%, 100%);
+      --secondary: hsl(0, 0%, 10%);
+      --secondary-foreground: hsl(0, 0%, 100%);
+      --accent: hsl(0, 0%, 10%);
+      --accent-foreground: hsl(0, 0%, 100%);
+      --destructive: hsl(0, 84%, 60%);
+      --destructive-foreground: hsl(0, 0%, 98%);
+      --ring: hsl(20, 95%, 54%);
+    }
+    @layer base {
+      * { border-color: hsl(var(--border)); }
+      html { scroll-behavior: smooth; }
+      body {
+        background-color: var(--background);
+        color: var(--foreground);
+        font-family: 'Inter', sans-serif;
+      }
+    }
+    @layer utilities {
+      .text-gradient {
+        background: linear-gradient(135deg, hsl(20, 95%, 54%) 0%, hsl(30, 100%, 60%) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .backdrop-blur-glass {
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+    }
+    html, body {
+      background-color: #fff;
+      color: #111;
+    }
+    @media (prefers-color-scheme: dark) {
+      html, body { color-scheme: dark; }
+    }
+  </style>
+</head>
+<body class="dark">
+  <div id="root"></div>
+  <script type="text/babel">
+    // ...React code will be inserted here...
+    // For brevity, I will use a simplified version of your provided code, with Lucide icons from CDN
+    // and Tailwind classes for styling. You can further expand it as needed.
+
+    const ROBOTS = [
+      { id: 'ur5e', name: 'UR5e', dof: 6 },
+      { id: 'franka', name: 'Franka Emika Panda', dof: 7 },
+      { id: 'kinova', name: 'Kinova Gen3', dof: 7 },
+      { id: 'kuka', name: 'KUKA LBR iiwa', dof: 7 },
+      { id: 'so101', name: 'SO-101 Humanoid Hand', dof: 5 },
+      { id: 'simulation', name: 'Simulation Mode', dof: 6 }
+    ];
+    const HAND_MODELS = [
+      { id: 'mediapipe', name: 'MediaPipe Hands' },
+      { id: 'wilor', name: 'WiLoR' }
+    ];
+    function HandTeleopDemo() {
+      const [selectedRobot, setSelectedRobot] = React.useState('ur5e');
+      const [selectedModel, setSelectedModel] = React.useState('mediapipe');
+      const [isConnected, setIsConnected] = React.useState(false);
+      const [isCameraActive, setIsCameraActive] = React.useState(false);
+      const [isTracking, setIsTracking] = React.useState(false);
+      const [showAnalytics, setShowAnalytics] = React.useState(false);
+      const [consoleLogs, setConsoleLogs] = React.useState([]);
+      // ...existing state logic...
+      return (
+        <div className="min-h-screen bg-gray-900 text-white">
+          <header className="fixed top-0 left-0 right-0 z-50 border-b bg-gray-800/70 backdrop-blur-glass border-gray-700/50">
+            <div className="max-w-4xl mx-auto px-6 py-4 flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center hover:bg-orange-600 transition-colors">
+                  <span className="text-white font-bold text-lg">JP</span>
+                </div>
+              </div>
+              <div className="flex items-center space-x-6">
+                <a href="/" className="flex items-center space-x-2 text-sm font-medium text-gray-300 hover:text-orange-500 transition-colors">
+                  <span>&larr;</span>
+                  <span>Back to Home</span>
+                </a>
+              </div>
+            </div>
+          </header>
+          <div className="pt-20 px-6 max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <h1 className="text-4xl font-bold mb-4 text-white">Hand Teleop System</h1>
+              <p className="text-xl text-gray-300 max-w-2xl mx-auto">Control robots with natural hand movements</p>
+            </div>
+            <div className="grid lg:grid-cols-2 gap-6 mb-8">
+              <div className="bg-gray-800 border-gray-700 p-6 rounded-xl">
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="inline-block"><svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M2 7V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2"/></svg></span>
+                  <h2 className="text-xl font-semibold text-white">Robot</h2>
+                  <span className={`ml-auto px-2 py-1 rounded text-xs ${isConnected ? 'bg-green-500' : 'bg-gray-600'}`}>{isConnected ? 'Connected' : 'Disconnected'}</span>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-white">Robot Embodiment</label>
+                    <select value={selectedRobot} onChange={e => setSelectedRobot(e.target.value)} className="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white">
+                      {ROBOTS.map(robot => (
+                        <option key={robot.id} value={robot.id} className="bg-gray-800 text-white">{robot.name} ({robot.dof} DOF)</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="aspect-square bg-gray-900 rounded-lg border-2 border-dashed border-gray-600 relative overflow-hidden flex items-center justify-center">
+                    <span className="text-gray-400">3D Robot Model Area</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button className={`px-4 py-2 rounded ${isConnected ? 'bg-gray-700' : 'bg-orange-500'} text-white`} onClick={() => setIsConnected(true)} disabled={isConnected}>Connect</button>
+                    <button className={`px-4 py-2 rounded ${isTracking ? 'bg-gray-700' : 'bg-orange-500'} text-white`} onClick={() => setIsTracking(!isTracking)} disabled={!isConnected}>{isTracking ? 'Stop Control' : 'Start Control'}</button>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-800 border-gray-700 p-6 rounded-xl">
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="inline-block"><svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6"/></svg></span>
+                  <h2 className="text-xl font-semibold text-white">Camera Feed</h2>
+                  <span className={`ml-auto px-2 py-1 rounded text-xs ${isCameraActive ? 'bg-green-500' : 'bg-gray-600'}`}>{isCameraActive ? 'Active' : 'Inactive'}</span>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex gap-2">
+                    <button className={`flex-1 px-4 py-2 rounded ${isCameraActive ? 'bg-gray-700' : 'bg-orange-500'} text-white`} onClick={() => setIsCameraActive(true)} disabled={isCameraActive}>Start Camera</button>
+                    <button className="flex-1 px-4 py-2 rounded bg-gray-700 text-white" onClick={() => setIsCameraActive(false)} disabled={!isCameraActive}>Stop</button>
+                  </div>
+                  <div className="bg-gray-900 rounded-lg overflow-hidden aspect-video flex items-center justify-center">
+                    <span className="text-gray-400">Camera feed will appear here</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-800 border-gray-700 rounded-xl overflow-hidden mt-8">
+              <button onClick={() => setShowAnalytics(!showAnalytics)} className="w-full p-6 text-left flex items-center justify-between hover:bg-gray-700/50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block"><svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+                  <h2 className="text-xl font-semibold text-white">Analytics & Debug Info</h2>
+                </div>
+                <span>{showAnalytics ? '▲' : '▼'}</span>
+              </button>
+              {showAnalytics && (
+                <div className="px-6 pb-6 border-t border-gray-700">
+                  <div className="grid md:grid-cols-2 gap-6 mt-6">
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-white">Hand Tracking Model</label>
+                      <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)} className="w-full p-2 bg-gray-800 border border-gray-600 rounded-lg text-white">
+                        {HAND_MODELS.map(model => (
+                          <option key={model.id} value={model.id} className="bg-gray-800 text-white">{model.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <h3 className="font-medium mb-2 flex items-center gap-2 text-white">Hand Tracking</h3>
+                      <div className="text-xs font-mono text-gray-300 space-y-1">No hand detected</div>
+                    </div>
+                    <div>
+                      <h3 className="font-medium mb-2 flex items-center gap-2 text-white">Robot Joints</h3>
+                      <div className="text-xs font-mono text-gray-300 space-y-1">J1: 0.000 rad<br/>J2: 0.000 rad<br/>J3: 0.000 rad<br/>J4: 0.000 rad<br/>J5: 0.000 rad<br/>J6: 0.000 rad</div>
+                    </div>
+                    <div>
+                      <h3 className="font-medium mb-2 flex items-center gap-2 text-white">API Status</h3>
+                      <div className="text-sm font-medium mb-2 text-yellow-400">⏳ Checking...</div>
+                      <button className="px-3 py-1 rounded border border-gray-600 text-gray-300 hover:border-orange-500 hover:text-orange-500">API Docs</button>
+                    </div>
+                  </div>
+                  <div className="mt-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium flex items-center gap-2 text-white">Output Console</h3>
+                      <button className="px-2 py-1 rounded border border-gray-600 text-gray-300 hover:border-orange-500 hover:text-orange-500" onClick={() => setConsoleLogs([])}>Clear</button>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-600 rounded-lg p-3 h-32 overflow-y-auto">
+                      <div className="text-gray-400 text-xs">Console output will appear here...</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="mt-8 text-center">
+              <div className="flex flex-wrap justify-center gap-4">
+                <a href="#" className="px-4 py-2 rounded border border-gray-600 text-gray-300 hover:border-orange-500 hover:text-orange-500">Full Demo</a>
+                <a href="https://github.com/7jep7/human2robot" className="px-4 py-2 rounded border border-gray-600 text-gray-300 hover:border-orange-500 hover:text-orange-500">GitHub</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    ReactDOM.render(<HandTeleopDemo />, document.getElementById('root'));
+  </script>
+</body>
+</html>

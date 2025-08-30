@@ -42,6 +42,27 @@ def run_command(cmd, description="", timeout=30):
         print(f"❌ {description} - Exception: {e}")
         return False
 
+def kill_existing_servers():
+    """Kill any existing processes on ports 8000 and 3000"""
+    print("🔧 Checking for existing servers...")
+    
+    ports_to_kill = [8000, 3000]
+    for port in ports_to_kill:
+        # Check if port is in use
+        check_cmd = f"lsof -ti:{port}"
+        try:
+            result = subprocess.run(check_cmd, shell=True, capture_output=True, text=True)
+            if result.returncode == 0 and result.stdout.strip():
+                print(f"   Found process on port {port}, killing...")
+                kill_cmd = f"fuser -k {port}/tcp"
+                subprocess.run(kill_cmd, shell=True, capture_output=True)
+                time.sleep(1)  # Give processes time to die
+                print(f"✅ Cleared port {port}")
+            else:
+                print(f"✅ Port {port} is free")
+        except Exception as e:
+            print(f"   ⚠️  Could not check/kill port {port}: {e}")
+
 def setup_resource_management():
     """Configure production-grade resource management"""
     print("🛡️  Configuring resource management...")
@@ -228,12 +249,40 @@ def quick_start():
     print("🌐 Frontend: Use 'python main.py --dev' to start web interface")
 
 def development_mode():
-    """Start development environment with both backend and frontend"""
+    """Start development environment with both backend and frontend in parallel"""
+    import subprocess
     print("� Starting development environment...")
     print("\n" + "="*50)
-    start_backend_with_resource_management()
+
+    # Kill any existing servers on the ports first
+    kill_existing_servers()
+
+    # Start backend server
+    backend_cmd = [sys.executable, "main.py", "--start"]
+    backend_proc = subprocess.Popen(backend_cmd)
+    print("🚀 Backend server starting (PID {}), API at http://localhost:8000".format(backend_proc.pid))
+
+    # Wait a moment for backend to start
     time.sleep(2)
-    serve_frontend()
+
+    # Start frontend server
+    frontend_cmd = [sys.executable, "-m", "http.server", "3000"]
+    frontend_proc = subprocess.Popen(frontend_cmd, cwd="frontend")
+    print("🌐 Frontend server starting (PID {}), web at http://localhost:3000/web/web_interface.html".format(frontend_proc.pid))
+
+    print("\nPress Ctrl+C to stop both servers.")
+
+    try:
+        # Wait for both processes
+        backend_proc.wait()
+        frontend_proc.wait()
+    except KeyboardInterrupt:
+        print("\n🛑 Shutting down servers...")
+        backend_proc.terminate()
+        frontend_proc.terminate()
+        backend_proc.wait()
+        frontend_proc.wait()
+        print("✅ Servers stopped.")
 
 def run_comprehensive_validation():
     """Run complete project validation"""

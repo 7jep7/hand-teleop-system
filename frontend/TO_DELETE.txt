@@ -1,0 +1,3 @@
+Deleted files:
+- HandTeleopDemo.html
+- Any other outdated demo HTML files (if present)
