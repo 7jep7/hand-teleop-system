@@ -50,52 +50,29 @@ class MediaPipeEstimator(HandPoseEstimator):
         res = self._rec.recognize_for_video(mp_img, self._ts_ms)
         self._ts_ms += self._DT_MS
 
-        if not res.hand_world_landmarks:
+        if not res.hand_landmarks:
             return []
 
         preds: list[HandKeypointsPred] = []
-        for wlm, ilm, hand in zip(
-            res.hand_world_landmarks, res.hand_landmarks, res.handedness
-        ):
-            kp3d = np.array([[lm.x, -lm.y, lm.z] for lm in wlm], np.float32)
-            kp2d = np.array([[lm.x * w, lm.y * h] for lm in ilm], np.float32)
-
-            base3d = (kp3d[5] + kp3d[9]) * 0.5        # same origin trick
-            base2d = (kp2d[5] + kp2d[9]) * 0.5
-
-            d_world = np.linalg.norm(kp3d[5][:2] - kp3d[0][:2])
-            d_pix   = np.linalg.norm(kp2d[5]       - kp2d[0])
-
-            tz = f_px * d_world / d_pix
-            tx = (base2d[0] - cx) * tz / f_px
-            ty = (base2d[1] - cy) * tz / f_px
-            t  = np.array([tx, -ty, tz], np.float32)
-
-            kp_cam = kp3d - base3d + t
-
-            # MVP: Extract specific fingertips for debugging
-            thumb_tip = kp_cam[4]
-            index_pip = kp_cam[6]  # MVP: Added index PIP joint
-            index_tip = kp_cam[8]
+        for ilm, hand in zip(res.hand_landmarks, res.handedness):
+            # Use 2D normalized coordinates directly - much simpler!
+            landmarks_2d = []
+            for lm in ilm:
+                landmarks_2d.append({
+                    "x": lm.x,  # Already normalized [0,1]
+                    "y": lm.y,  # Already normalized [0,1] 
+                    "z": lm.z,  # Relative depth
+                    "visibility": getattr(lm, 'visibility', 1.0)
+                })
             
-            # MVP: Console logging for debugging
-            hand_type = "RIGHT" if hand[0].category_name.lower() == "right" else "LEFT"
-            print(f"[MVP] {hand_type} Hand - Thumb: ({thumb_tip[0]:.3f}, {thumb_tip[1]:.3f}, {thumb_tip[2]:.3f})")
-            print(f"[MVP] {hand_type} Hand - Index PIP: ({index_pip[0]:.3f}, {index_pip[1]:.3f}, {index_pip[2]:.3f})")
-            print(f"[MVP] {hand_type} Hand - Index Tip: ({index_tip[0]:.3f}, {index_tip[1]:.3f}, {index_tip[2]:.3f})")
+            # Create a simple result that includes the 2D landmarks
+            result = {
+                "is_right": hand[0].category_name.lower() == "right",
+                "landmarks_2d": landmarks_2d,
+                "keypoints": None  # We'll extract keypoints in the backend
+            }
+            
+            preds.append(result)
 
-            preds.append(
-                HandKeypointsPred(
-                    is_right = hand[0].category_name.lower() == "right",
-                    keypoints = TrackedHandKeypoints(
-                        thumb_mcp   = kp_cam[2],
-                        thumb_tip   = kp_cam[4],
-                        index_base  = kp_cam[5],
-                        index_pip   = kp_cam[6],  # MVP: Added index PIP
-                        index_tip   = kp_cam[8],
-                        middle_base = kp_cam[9],
-                        middle_tip  = kp_cam[12],
-                    ),
-                )
-            )
+        return preds
         return preds

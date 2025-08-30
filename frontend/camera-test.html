@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Test</title>
+    <style>
+        body { 
+            background: #1f2937; 
+            color: white; 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #10b981; }
+        .error { background: #ef4444; }
+        .warning { background: #f59e0b; }
+        button { 
+            background: #3b82f6; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            margin: 5px;
+        }
+        button:hover { background: #2563eb; }
+        button:disabled { 
+            background: #6b7280; 
+            cursor: not-allowed; 
+        }
+        video { 
+            border: 2px solid #374151; 
+            border-radius: 8px; 
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Camera Access Test</h1>
+        
+        <div id="status" class="status warning">
+            Camera not tested yet. Click "Test Camera" below.
+        </div>
+        
+        <button id="testCamera">Test Camera Access</button>
+        <button id="stopCamera" disabled>Stop Camera</button>
+        
+        <div id="videoContainer" style="display: none;">
+            <h3>Camera Feed:</h3>
+            <video id="video" width="640" height="480" autoplay muted></video>
+        </div>
+        
+        <div id="troubleshooting" style="margin-top: 30px;">
+            <h3>Troubleshooting Camera Issues:</h3>
+            <ul>
+                <li><strong>Chrome:</strong> Settings → Privacy and security → Site Settings → Camera</li>
+                <li><strong>Safari:</strong> Safari → Preferences → Websites → Camera</li>
+                <li><strong>System:</strong> System Preferences → Security & Privacy → Privacy → Camera</li>
+                <li><strong>HTTPS Required:</strong> Some browsers require HTTPS for camera access (localhost usually works)</li>
+            </ul>
+            
+            <h3>Browser Compatibility:</h3>
+            <div id="browserInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const testCameraBtn = document.getElementById('testCamera');
+        const stopCameraBtn = document.getElementById('stopCamera');
+        const video = document.getElementById('video');
+        const videoContainer = document.getElementById('videoContainer');
+        const browserInfo = document.getElementById('browserInfo');
+        
+        let currentStream = null;
+
+        // Show browser info
+        browserInfo.innerHTML = `
+            <p><strong>User Agent:</strong> ${navigator.userAgent}</p>
+            <p><strong>Platform:</strong> ${navigator.platform}</p>
+            <p><strong>MediaDevices Support:</strong> ${navigator.mediaDevices ? 'Yes' : 'No'}</p>
+            <p><strong>getUserMedia Support:</strong> ${navigator.mediaDevices?.getUserMedia ? 'Yes' : 'No'}</p>
+        `;
+
+        function updateStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        async function testCamera() {
+            try {
+                updateStatus('Requesting camera access...', 'warning');
+                
+                // Check if mediaDevices is available
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Camera API not supported in this browser');
+                }
+                
+                // Request camera access
+                const constraints = {
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    },
+                    audio: false
+                };
+                
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                
+                // Success!
+                video.srcObject = currentStream;
+                videoContainer.style.display = 'block';
+                
+                updateStatus('✅ Camera access granted! Video feed active.', 'success');
+                testCameraBtn.disabled = true;
+                stopCameraBtn.disabled = false;
+                
+                // Show video info
+                const videoTrack = currentStream.getVideoTracks()[0];
+                const settings = videoTrack.getSettings();
+                console.log('Camera settings:', settings);
+                
+                updateStatus(`✅ Camera active (${settings.width}x${settings.height})`, 'success');
+                
+            } catch (error) {
+                console.error('Camera error:', error);
+                
+                let errorMessage = 'Camera access failed: ';
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMessage += 'Permission denied. Please allow camera access in browser settings.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage += 'No camera found. Please connect a camera.';
+                } else if (error.name === 'NotReadableError') {
+                    errorMessage += 'Camera is being used by another application.';
+                } else if (error.name === 'OverconstrainedError') {
+                    errorMessage += 'Camera constraints not supported.';
+                } else {
+                    errorMessage += error.message;
+                }
+                
+                updateStatus(`❌ ${errorMessage}`, 'error');
+                videoContainer.style.display = 'none';
+            }
+        }
+
+        function stopCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+                currentStream = null;
+                video.srcObject = null;
+                videoContainer.style.display = 'none';
+                
+                updateStatus('Camera stopped', 'warning');
+                testCameraBtn.disabled = false;
+                stopCameraBtn.disabled = true;
+            }
+        }
+
+        testCameraBtn.addEventListener('click', testCamera);
+        stopCameraBtn.addEventListener('click', stopCamera);
+        
+        // Auto-test on page load (optional)
+        // testCamera();
+    </script>
+</body>
+</html>

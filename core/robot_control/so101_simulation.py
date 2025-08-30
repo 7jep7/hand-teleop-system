@@ -9,7 +9,13 @@ import json
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 
-from .kinematics import RobotKinematics
+try:
+    from .kinematics import RobotKinematics
+    KINEMATICS_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Kinematics module not available: {e}")
+    RobotKinematics = None
+    KINEMATICS_AVAILABLE = False
 
 
 class SO101Simulation:
@@ -50,13 +56,19 @@ class SO101Simulation:
         
         # Initialize kinematics
         urdf_path = Path(__file__).parent.parent.parent / "assets" / "meshes" / "so101" / "so101_complete.urdf"
-        try:
-            self.kinematics = RobotKinematics(str(urdf_path), frame_name="gripper_frame_link")
-            self.kinematics_available = True
-            print(f"✅ SO-101 kinematics initialized with URDF: {urdf_path}")
-        except Exception as e:
-            print(f"⚠️  Kinematics not available: {e}")
+        if KINEMATICS_AVAILABLE and RobotKinematics is not None:
+            try:
+                self.kinematics = RobotKinematics(str(urdf_path), frame_name="gripper_frame_link")
+                self.kinematics_available = True
+                print(f"✅ SO-101 kinematics initialized with URDF: {urdf_path}")
+            except Exception as e:
+                print(f"⚠️  Kinematics not available: {e}")
+                self.kinematics_available = False
+                self.kinematics = None
+        else:
+            print("⚠️  Kinematics not available: pinocchio not installed")
             self.kinematics_available = False
+            self.kinematics = None
     
     def get_joint_state(self) -> Dict:
         """Get current joint state as dictionary."""
