@@ -930,74 +930,35 @@ async def process_hand_tracking_fast(frame: np.ndarray, robot_type: str, trackin
         if hand_data is None:
             return None, None, None
         
-        # Convert MediaPipe HandKeypointsPred to our standard format
+        # Convert MediaPipe result to our standard format - SIMPLE VERSION
         hand_pose = {
             "landmarks": [],
-            "confidence": 0.8,  # MediaPipe doesn't provide direct confidence
-            "handedness": "right" if hand_data.is_right else "left"
+            "confidence": 0.8,
+            "handedness": "right" if hand_data.get("is_right", True) else "left"
         }
         
-        # Get the 2D normalized coordinates directly from MediaPipe
-        # We need to access the original MediaPipe results, not the processed 3D keypoints
-        # Let's modify the approach to get the raw MediaPipe 2D landmarks
-        
-        # For now, let's use a simpler approach: project the 3D keypoints to 2D
-        if hasattr(hand_data, 'keypoints') and hand_data.keypoints is not None:
-            kp = hand_data.keypoints
+        # Use MediaPipe's 2D normalized coordinates directly - they're already perfect!
+        if "landmarks_2d" in hand_data and hand_data["landmarks_2d"]:
+            landmarks_2d = hand_data["landmarks_2d"]
             
-            # Create 21-point landmark array matching MediaPipe standard
-            landmarks = [None] * 21
-            
-            # Fill in the keypoints we have (these are 3D world coordinates in meters)
-            landmarks[2] = kp.thumb_mcp      # Thumb MCP
-            landmarks[4] = kp.thumb_tip      # Thumb tip
-            landmarks[5] = kp.index_base     # Index MCP
-            landmarks[6] = kp.index_pip      # Index PIP  
-            landmarks[8] = kp.index_tip      # Index tip
-            landmarks[9] = kp.middle_base    # Middle MCP
-            landmarks[12] = kp.middle_tip    # Middle tip
-            
-            # Find the bounds of the hand for proper scaling
-            valid_points = [lm for lm in landmarks if lm is not None]
-            if valid_points:
-                valid_points = np.array(valid_points)
+            # Simply use the coordinates as-is - MediaPipe already normalized them to [0,1]
+            for lm in landmarks_2d:
+                hand_pose["landmarks"].append({
+                    "x": float(lm["x"]),  # Already normalized [0,1]
+                    "y": float(lm["y"]),  # Already normalized [0,1]
+                    "z": float(lm["z"]),  # Relative depth
+                    "visibility": float(lm.get("visibility", 1.0))
+                })
                 
-                # Get bounds in world coordinates
-                x_min, x_max = valid_points[:, 0].min(), valid_points[:, 0].max()
-                y_min, y_max = valid_points[:, 1].min(), valid_points[:, 1].max()
-                
-                # Calculate center and scale
-                x_center = (x_min + x_max) / 2
-                y_center = (y_min + y_max) / 2
-                
-                # Scale factor - adjust this to make hand appear proper size
-                scale_factor = 0.3  # Adjust this value to make hand bigger/smaller
-                
-                # Convert to normalized coordinates with proper scaling
-                for i, lm in enumerate(landmarks):
-                    if lm is not None:
-                        # Convert from world coordinates to screen coordinates  
-                        # Normalize around center, scale appropriately, then map to [0,1]
-                        x = 0.5 + (lm[0] - x_center) * scale_factor
-                        y = 0.5 - (lm[1] - y_center) * scale_factor  # Flip Y axis for screen coordinates
-                        z = lm[2]  # Keep depth
-                        
-                        hand_pose["landmarks"].append({
-                            "x": float(max(0, min(1, x))),  # Clamp to [0,1]
-                            "y": float(max(0, min(1, y))),  # Clamp to [0,1] 
-                            "z": float(z),
-                            "visibility": 1.0
-                        })
-                    else:
-                        # Fill missing landmarks with center point
-                        hand_pose["landmarks"].append({
-                            "x": 0.5,
-                            "y": 0.5,
-                            "z": 0.0,
-                            "visibility": 0.0
-                        })
+            print(f"[DEBUG] Hand detected with {len(hand_pose['landmarks'])} landmarks")
+            # Debug the key points
+            if len(hand_pose["landmarks"]) >= 9:
+                thumb_tip = hand_pose["landmarks"][4]
+                index_tip = hand_pose["landmarks"][8] 
+                print(f"[DEBUG] Thumb tip: ({thumb_tip['x']:.3f}, {thumb_tip['y']:.3f})")
+                print(f"[DEBUG] Index tip: ({index_tip['x']:.3f}, {index_tip['y']:.3f})")
         else:
-            # Fallback: create empty landmarks if no keypoints available
+            # Fallback: create empty landmarks if no detection
             for i in range(21):
                 hand_pose["landmarks"].append({
                     "x": 0.5,
