@@ -10,378 +10,425 @@ import os
 import subprocess
 import time
 import multiprocessing
+import signal
+import psutil
 from pathlib import Path
+from typing import Optional, List, Tuple, Any
 
-# Get project root
+# Get project root and set working directory
 PROJECT_ROOT = Path(__file__).parent
 os.chdir(PROJECT_ROOT)
 
-# Get project root
-PROJECT_ROOT = Path(__file__).parent
-os.chdir(PROJECT_ROOT)
+class ProcessManager:
+    """Enhanced process management for robust development environment"""
+    
+    def __init__(self):
+        self.backend_proc: Optional[subprocess.Popen] = None
+        self.frontend_proc: Optional[subprocess.Popen] = None
+        self.cleanup_registered = False
+        
+    def register_cleanup(self):
+        """Register cleanup handlers for graceful shutdown"""
+        if not self.cleanup_registered:
+            signal.signal(signal.SIGINT, self._cleanup_handler)
+            signal.signal(signal.SIGTERM, self._cleanup_handler)
+            self.cleanup_registered = True
+    
+    def _cleanup_handler(self, signum, frame):
+        """Handle cleanup on signal"""
+        print(f"\n🛑 Received signal {signum}, shutting down...")
+        self.cleanup_all()
+        sys.exit(0)
+    
+    def kill_port_processes(self, port: int, timeout: int = 10) -> bool:
+        """Kill processes using a specific port with enhanced robustness"""
+        try:
+            # Find processes using the port
+            pids = []
+            for proc in psutil.process_iter(['pid', 'name', 'connections']):
+                try:
+                    for conn in proc.info['connections'] or []:
+                        if hasattr(conn, 'laddr') and conn.laddr and conn.laddr.port == port:
+                            pids.append(proc.info['pid'])
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            if not pids:
+                print(f"✅ Port {port} is free")
+                return True
+                
+            print(f"🔄 Found {len(pids)} process(es) on port {port}, terminating...")
+            
+            # Try graceful termination first
+            for pid in pids:
+                try:
+                    proc = psutil.Process(pid)
+                    proc.terminate()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            # Wait for graceful termination
+            time.sleep(2)
+            
+            # Force kill remaining processes
+            remaining_pids = []
+            for pid in pids:
+                try:
+                    proc = psutil.Process(pid)
+                    if proc.is_running():
+                        proc.kill()
+                        remaining_pids.append(pid)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            # Final verification
+            time.sleep(1)
+            for pid in remaining_pids:
+                try:
+                    if psutil.Process(pid).is_running():
+                        print(f"⚠️  Process {pid} still running on port {port}")
+                        return False
+                except psutil.NoSuchProcess:
+                    continue
+                    
+            print(f"✅ Cleared port {port}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error clearing port {port}: {e}")
+            # Fallback to shell commands
+            return self._fallback_port_cleanup(port)
+    
+    def _fallback_port_cleanup(self, port: int) -> bool:
+        """Fallback port cleanup using shell commands"""
+        try:
+            # Try lsof approach
+            result = subprocess.run(
+                f"lsof -ti:{port} | xargs kill -9",
+                shell=True, capture_output=True, timeout=5
+            )
+            time.sleep(1)
+            
+            # Verify
+            verify = subprocess.run(
+                f"lsof -ti:{port}",
+                shell=True, capture_output=True, timeout=3
+            )
+            
+            success = verify.returncode != 0 or not verify.stdout.strip()
+            if success:
+                print(f"✅ Cleared port {port} (fallback)")
+            else:
+                print(f"⚠️  Port {port} cleanup failed")
+            return success
+            
+        except Exception as e:
+            print(f"❌ Fallback cleanup failed for port {port}: {e}")
+            return False
+    
+    def cleanup_all(self):
+        """Clean up all managed processes"""
+        processes = []
+        if self.backend_proc:
+            processes.append(("Backend", self.backend_proc))
+        if self.frontend_proc:
+            processes.append(("Frontend", self.frontend_proc))
+            
+        if not processes:
+            return
+            
+        print("🛑 Stopping servers...")
+        
+        # Graceful termination
+        for name, proc in processes:
+            try:
+                if proc.poll() is None:
+                    print(f"   Terminating {name}...")
+                    proc.terminate()
+            except Exception as e:
+                print(f"   Warning: Could not terminate {name}: {e}")
+        
+        # Wait for graceful shutdown
+        time.sleep(3)
+        
+        # Force kill if needed
+        for name, proc in processes:
+            try:
+                if proc.poll() is None:
+                    print(f"   Force killing {name}...")
+                    proc.kill()
+                    proc.wait(timeout=2)
+            except Exception as e:
+                print(f"   Warning: Could not kill {name}: {e}")
+        
+        print("✅ Cleanup complete")
 
-def run_command(cmd, description="", timeout=30):
+def run_command(cmd: str, description: str = "", timeout: int = 30) -> bool:
     """Run a command and return success status"""
-    print(f"🔄 {description}")
+    if description:
+        print(f"🔄 {description}")
+    
     try:
         result = subprocess.run(
             cmd, shell=True, capture_output=True, text=True, timeout=timeout
         )
         if result.returncode == 0:
-            print(f"✅ {description} - Success")
+            if description:
+                print(f"✅ {description} - Success")
             return True
         else:
-            print(f"❌ {description} - Failed")
-            if result.stderr:
-                print(f"   Error: {result.stderr.strip()}")
+            if description:
+                print(f"❌ {description} - Failed")
+                if result.stderr:
+                    print(f"   Error: {result.stderr.strip()}")
             return False
     except subprocess.TimeoutExpired:
-        print(f"⏱️  {description} - Timeout")
+        if description:
+            print(f"⏱️  {description} - Timeout")
         return False
     except Exception as e:
-        print(f"❌ {description} - Exception: {e}")
+        if description:
+            print(f"❌ {description} - Exception: {e}")
         return False
 
-def kill_existing_servers():
-    """Kill any existing processes on ports 8000 and 3000"""
-    print("🔧 Checking for existing servers...")
-    
-    ports_to_kill = [8000, 3000]
-    for port in ports_to_kill:
-        # Check if port is in use
-        check_cmd = f"lsof -ti:{port}"
-        try:
-            result = subprocess.run(check_cmd, shell=True, capture_output=True, text=True)
-            if result.returncode == 0 and result.stdout.strip():
-                print(f"   Found process on port {port}, killing...")
-                kill_cmd = f"fuser -k {port}/tcp"
-                subprocess.run(kill_cmd, shell=True, capture_output=True)
-                time.sleep(1)  # Give processes time to die
-                print(f"✅ Cleared port {port}")
-            else:
-                print(f"✅ Port {port} is free")
-        except Exception as e:
-            print(f"   ⚠️  Could not check/kill port {port}: {e}")
-
 def setup_resource_management():
-    """Configure production-grade resource management"""
+    """Configure optimized resource management"""
     print("🛡️  Configuring resource management...")
     
     # Get system resources
     total_cores = multiprocessing.cpu_count()
-    use_cores = max(1, int(total_cores * 0.5))  # Reduced from 70% to 50% to prevent Chrome freeze
+    use_cores = max(1, min(4, int(total_cores * 0.6)))  # Limit to max 4 cores
     
     # Set environment variables for resource control
     env_vars = {
         'OMP_NUM_THREADS': str(use_cores),
         'MKL_NUM_THREADS': str(use_cores),
+        'NUMBA_NUM_THREADS': str(use_cores),
         'CUDA_VISIBLE_DEVICES': '0',
-        'PYTORCH_CUDA_ALLOC_CONF': 'max_split_size_mb:256'  # Reduced from 512MB to 256MB
+        'PYTORCH_CUDA_ALLOC_CONF': 'max_split_size_mb:128'  # Conservative memory
     }
     
     for key, value in env_vars.items():
         os.environ[key] = value
         print(f"   {key}={value}")
     
-    # Set memory limits (requires privileged access)
-    try:
-        run_command("ulimit -v 4194304", "Set virtual memory limit (4GB)", 2)  # Reduced from 8GB
-        run_command("ulimit -m 3145728", "Set physical memory limit (3GB)", 2)  # Reduced from 6GB
-    except:
-        print("   ⚠️  Memory limits require privileged access")
-    
     print(f"   CPU cores: {use_cores}/{total_cores}")
-    print("   Process priority: Nice +10")
 
-def ensure_partition_mounted():
-    """Ensure the conda environments partition is mounted"""
-    conda_dir = "/mnt/nvme0n1p8/conda-envs"
-    
-    if not os.path.exists(conda_dir):
-        print("🔧 Mounting conda environments partition...")
-        mount_success = run_command(
-            "sudo mount /dev/nvme0n1p8 /mnt/nvme0n1p8", 
-            "Mount partition for conda environments", 
-            10
+def check_backend_health(timeout: int = 5) -> bool:
+    """Check if backend is responding"""
+    try:
+        result = subprocess.run(
+            "curl -s -f http://localhost:8000/api/health",
+            shell=True, capture_output=True, timeout=timeout
         )
-        if not mount_success:
-            print("   ⚠️  Partition mounting failed - using fallback environment")
-    else:
-        print("✅ Conda environments partition already mounted")
+        return result.returncode == 0
+    except:
+        return False
 
-def check_backend_status():
-    """Check if backend is running"""
-    print("\n🔍 Checking backend status...")
-    return run_command("curl -s http://localhost:8000/api/health > /dev/null", "Backend health check", 5)
-
-def cleanup_project():
-    """Clean up temporary files and cache"""
-    print("\n🧹 Cleaning up project...")
+def wait_for_backend(max_wait: int = 30) -> bool:
+    """Wait for backend to be ready"""
+    print("⏳ Waiting for backend to be ready...")
     
-    cleanup_commands = [
-        ("find . -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true", "Remove Python cache"),
-        ("find . -name '*.pyc' -delete", "Remove compiled Python files"),  
-        ("find . -name 'temp_*' -delete", "Remove temporary files"),
-        ("find . -name '*.tmp' -delete", "Remove .tmp files"),
-    ]
+    for i in range(max_wait):
+        if check_backend_health():
+            print("✅ Backend health check passed")
+            return True
+        time.sleep(1)
+        if i % 5 == 4:  # Progress indicator every 5 seconds
+            print(f"   Still waiting... ({i+1}s)")
     
-    for cmd, desc in cleanup_commands:
-        run_command(cmd, desc)
-
-def validate_structure():
-    """Validate project structure"""
-    print("\n📁 Validating project structure...")
-    
-    required_files = [
-        "backend/render_backend.py",
-        "core/__init__.py", 
-        "core/hand_pose/factory.py",
-        "core/robot_control/kinematics.py",
-        "requirements.txt",
-        "README.md",
-        "tests/integration/test_comprehensive.py"
-    ]
-    
-    missing = []
-    for file_path in required_files:
-        if not Path(file_path).exists():
-            missing.append(file_path)
-            print(f"❌ Missing: {file_path}")
-        else:
-            print(f"✅ Found: {file_path}")
-    
-    return len(missing) == 0
-
-def show_project_info():
-    """Show project information"""
-    print("\n📊 Project Information:")
-    print(f"   Root: {PROJECT_ROOT}")
-    print(f"   Python: {sys.executable}")
-    
-    # Count files by type
-    py_files = len(list(Path(".").rglob("*.py")))
-    md_files = len(list(Path(".").rglob("*.md")))
-    
-    print(f"   Python files: {py_files}")
-    print(f"   Documentation files: {md_files}")
-
-def run_tests():
-    """Run the test suite"""
-    print("\n🧪 Running test suite...")
-    
-    # First ensure backend is running
-    if not check_backend_status():
-        print("Backend not running, attempting to start...")
-        start_backend_with_resource_management()
-        time.sleep(3)  # Give it time to start
-        
-        if not check_backend_status():
-            print("❌ Could not start backend, some tests will fail")
-    
-    # Run comprehensive tests
-    test_cmd = "python3 tests/integration/test_comprehensive.py"
-    return run_command(test_cmd, "Run comprehensive tests", 60)
-
-def start_backend_with_resource_management():
-    """Start the backend server with production-grade resource management"""
-    print("\n🚀 Starting backend server with resource management...")
-    
-    # Production-grade resource management
-    setup_resource_management()
-    
-    # Check and mount partition if needed
-    ensure_partition_mounted()
-    
-    # Use hand-teleop environment (unified approach)
-    conda_path = "/mnt/nvme0n1p8/conda-envs/hand-teleop/bin/python"
-    fallback_check = run_command("conda info --envs | grep hand-teleop", "Check conda environment", 5)
-    
-    if os.path.exists(conda_path):
-        print("✅ Using optimized conda environment with resource management")
-        cmd = f"nice -n 10 {conda_path} backend/render_backend.py"
-        return run_command(cmd, "Start backend with production settings", 10)
-    elif fallback_check:
-        print("✅ Using conda environment with basic resource management")  
-        cmd = "nice -n 10 conda run -n hand-teleop python3 backend/render_backend.py"
-        return run_command(cmd, "Start backend with conda run", 10)
-    else:
-        print("⚠️  Using system Python with basic resource management")
-        return run_command("nice -n 10 python3 backend/render_backend.py", "Start backend with system Python", 10)
-
-def serve_frontend():
-    """Serve the frontend for testing"""
-    print("\n🌐 Serving frontend...")
-    
-    # First ensure backend is running
-    if not check_backend_status():
-        print("Backend not running, starting it first...")
-        start_backend_with_resource_management()
-        time.sleep(3)
-    
-    # Serve the frontend directory
-    frontend_cmd = "cd frontend && python3 -m http.server 3000"
-    print("🔄 Starting frontend server on http://localhost:3000")
-    print("🔗 Backend API available at http://localhost:8000")
-    print("📋 Access the web interface at: http://localhost:3000/web/web_interface.html")
-    
-    return run_command(frontend_cmd, "Start frontend server", timeout=5)
-
-def start_api_server():
-    """Start API server (main backend functionality)"""
-    print("\n🚀 Starting Hand Teleop System with production-grade resource management...")
-    start_backend_with_resource_management()
-
-def quick_start():
-    """Quick start command for immediate use"""
-    print("� Hand Teleop System - Quick Start")
-    print("=" * 50)
-    
-    # Production defaults
-    setup_resource_management()
-    ensure_partition_mounted()
-    
-    print("\n� Starting backend with production settings...")
-    start_backend_with_resource_management()
-    
-    print("\n✅ System ready!")
-    print("🔗 API: http://localhost:8000")
-    print("📋 Health check: http://localhost:8000/api/health")
-    print("🌐 Frontend: Use 'python main.py --dev' to start web interface")
+    print("❌ Backend health check timeout")
+    return False
 
 def development_mode():
-    """Start development environment with both backend and frontend in parallel"""
-    import subprocess
-    print("� Starting development environment...")
-    print("\n" + "="*50)
-
-    # Kill any existing servers on the ports first
-    kill_existing_servers()
-
-    # Start backend server
-    backend_cmd = [sys.executable, "main.py", "--start"]
-    backend_proc = subprocess.Popen(backend_cmd)
-    print("🚀 Backend server starting (PID {}), API at http://localhost:8000".format(backend_proc.pid))
-
-    # Wait a moment for backend to start
-    time.sleep(2)
-
-    # Start frontend server
-    frontend_cmd = [sys.executable, "-m", "http.server", "3000"]
-    frontend_proc = subprocess.Popen(frontend_cmd, cwd="frontend")
-    print("🌐 Frontend server starting (PID {}), web at http://localhost:3000/web/web_interface.html".format(frontend_proc.pid))
-
-    print("\nPress Ctrl+C to stop both servers.")
-
-    try:
-        # Wait for both processes
-        backend_proc.wait()
-        frontend_proc.wait()
-    except KeyboardInterrupt:
-        print("\n🛑 Shutting down servers...")
-        backend_proc.terminate()
-        frontend_proc.terminate()
-        backend_proc.wait()
-        frontend_proc.wait()
-        print("✅ Servers stopped.")
-
-def run_comprehensive_validation():
-    """Run complete project validation"""
-    print("🎯 Running complete project validation...")
-    
-    tasks = [
-        ("Project Info", show_project_info),
-        ("Cleanup", cleanup_project),
-        ("Structure Check", validate_structure),
-        ("Start Backend", start_backend_with_resource_management),
-        ("Run Tests", run_tests),
-    ]
-    
-    results = {}
-    for task_name, task_func in tasks:
-        print(f"\n{'='*20} {task_name} {'='*20}")
-        try:
-            result = task_func()
-            results[task_name] = result if isinstance(result, bool) else True
-        except Exception as e:
-            print(f"❌ {task_name} failed: {e}")
-            results[task_name] = False
-    
-    # Summary
-    print(f"\n{'='*60}")
-    print("📋 SUMMARY")
+    """Start enhanced development environment"""
+    print("🚀 Starting development environment...")
     print("=" * 60)
     
-    for task, success in results.items():
-        status = "✅ PASS" if success else "❌ FAIL"
-        print(f"{task:<20} {status}")
+    # Initialize process manager
+    pm = ProcessManager()
+    pm.register_cleanup()
     
-    passed = sum(1 for r in results.values() if r)
-    total = len(results)
-    print(f"\nOverall: {passed}/{total} tasks completed successfully")
+    # Setup resource management
+    setup_resource_management()
     
-    if passed == total:
-        print("🎉 Project is ready for production!")
-    else:
-        print("⚠️  Some issues found. Check output above.")
+    # Clear ports
+    print("\n🔧 Clearing ports...")
+    ports_cleared = True
+    for port in [8000, 3000]:
+        if not pm.kill_port_processes(port):
+            ports_cleared = False
     
-    return passed == total
+    if not ports_cleared:
+        print("❌ Could not clear all ports. Please resolve manually.")
+        return False
+    
+    print("⏳ Port cleanup complete, starting servers...")
+    time.sleep(2)
+    
+    # Start backend
+    try:
+        print("🔄 Starting backend server...")
+        backend_cmd = [sys.executable, "backend/render_backend.py"]
+        pm.backend_proc = subprocess.Popen(
+            backend_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            env=os.environ.copy()  # Include our resource management env vars
+        )
+        print(f"🚀 Backend server started (PID {pm.backend_proc.pid})")
+        
+        # Wait for backend to be ready
+        if not wait_for_backend():
+            print("❌ Backend failed to start properly")
+            pm.cleanup_all()
+            return False
+            
+    except Exception as e:
+        print(f"❌ Failed to start backend: {e}")
+        pm.cleanup_all()
+        return False
+    
+    # Start frontend
+    try:
+        print("🔄 Starting frontend server...")
+        frontend_cmd = [sys.executable, "-m", "http.server", "3000"]
+        pm.frontend_proc = subprocess.Popen(
+            frontend_cmd,
+            cwd="frontend",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True
+        )
+        print(f"🌐 Frontend server started (PID {pm.frontend_proc.pid})")
+        time.sleep(2)
+        
+        # Quick check that frontend started
+        if pm.frontend_proc.poll() is not None:
+            stdout, stderr = pm.frontend_proc.communicate()
+            print(f"❌ Frontend failed to start: {stderr}")
+            pm.cleanup_all()
+            return False
+            
+    except Exception as e:
+        print(f"❌ Failed to start frontend: {e}")
+        pm.cleanup_all()
+        return False
+    
+    # Success message
+    print("\n" + "✅" * 20)
+    print("🎉 Development environment ready!")
+    print("=" * 60)
+    print("🔗 Backend API: http://localhost:8000")
+    print("📋 Health check: http://localhost:8000/api/health")
+    print("🌐 Frontend: http://localhost:3000")
+    print("🎯 MVP Demo: http://localhost:3000/mvp-demo.html")
+    print("🎯 Hand Demo: http://localhost:3000/HandTeleopDemo.html")
+    print("=" * 60)
+    print("💡 Press Ctrl+C to stop all servers")
+    print()
+    
+    try:
+        # Monitor both processes
+        while True:
+            # Check backend
+            if pm.backend_proc.poll() is not None:
+                print("❌ Backend process died unexpectedly")
+                stdout, stderr = pm.backend_proc.communicate()
+                if stderr:
+                    print(f"   Backend error: {stderr}")
+                break
+                
+            # Check frontend  
+            if pm.frontend_proc.poll() is not None:
+                print("❌ Frontend process died unexpectedly")
+                stdout, stderr = pm.frontend_proc.communicate()
+                if stderr:
+                    print(f"   Frontend error: {stderr}")
+                break
+                
+            time.sleep(2)
+            
+    except KeyboardInterrupt:
+        print("\n🛑 Keyboard interrupt received")
+    finally:
+        pm.cleanup_all()
+    
+    return True
+
+def run_tests():
+    """Run test suite"""
+    print("🧪 Running tests...")
+    
+    test_commands = [
+        ("python -m pytest tests/ -v", "Unit tests"),
+        ("python test_so101.py", "SO-101 integration test"),
+    ]
+    
+    all_passed = True
+    for cmd, desc in test_commands:
+        print(f"\n🔄 Running {desc}...")
+        success = run_command(cmd, "", 60)
+        if success:
+            print(f"✅ {desc} passed")
+        else:
+            print(f"❌ {desc} failed")
+            all_passed = False
+    
+    return all_passed
+
+def show_project_info():
+    """Display project information"""
+    print("📋 Hand Teleop System Information")
+    print("=" * 50)
+    print(f"📁 Project Root: {PROJECT_ROOT}")
+    print(f"🐍 Python Version: {sys.version}")
+    print(f"💻 CPU Cores: {multiprocessing.cpu_count()}")
+    
+    # Check key dependencies
+    dependencies = ["fastapi", "opencv-python", "mediapipe", "numpy"]
+    print("\n📦 Key Dependencies:")
+    for dep in dependencies:
+        try:
+            __import__(dep.replace("-", "_"))
+            print(f"   ✅ {dep}")
+        except ImportError:
+            print(f"   ❌ {dep} (missing)")
+    
+    print()
+    return True
 
 def main():
-    """Main entry point with comprehensive management"""
-    parser = argparse.ArgumentParser(
-        description="Hand Teleop System - Production-ready hand tracking and robot control",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python main.py                    # Quick start (recommended)
-  python main.py --start            # Start API server
-  python main.py --dev              # Development mode (backend + frontend)
-  python main.py --test             # Run test suite
-  python main.py --validate         # Complete validation
-  python main.py --clean            # Clean up project
-  python main.py --info             # Show project info
-        """
-    )
-    
-    # Main commands
-    parser.add_argument('--start', action='store_true', help='Start API server')
-    parser.add_argument('--dev', action='store_true', help='Development mode (backend + frontend)')
-    parser.add_argument('--test', action='store_true', help='Run test suite')
-    parser.add_argument('--validate', action='store_true', help='Run complete validation')
-    parser.add_argument('--clean', action='store_true', help='Clean up temporary files')
-    parser.add_argument('--info', action='store_true', help='Show project information')
-    parser.add_argument('--frontend', action='store_true', help='Serve frontend only')
-    parser.add_argument('--check', action='store_true', help='Check project structure')
+    """Main entry point"""
+    parser = argparse.ArgumentParser(description="Hand Teleop System")
+    parser.add_argument("--dev", action="store_true", help="Start development environment")
+    parser.add_argument("--test", action="store_true", help="Run tests")
+    parser.add_argument("--info", action="store_true", help="Show project info")
     
     args = parser.parse_args()
     
-    # If no arguments, do quick start
-    if len(sys.argv) == 1:
-        quick_start()
-        return 0
-    
-    # Execute based on arguments
-    if args.clean:
-        cleanup_project()
+    if args.dev:
+        return development_mode()
     elif args.test:
-        return 0 if run_tests() else 1
-    elif args.start:
-        start_api_server()
-    elif args.frontend:
-        serve_frontend()
-    elif args.dev:
-        development_mode()
-    elif args.check:
-        return 0 if validate_structure() else 1
+        return run_tests()
     elif args.info:
-        show_project_info()
-    elif args.validate:
-        return 0 if run_comprehensive_validation() else 1
+        return show_project_info()
     else:
+        print("Hand Teleop System")
+        print("Use --dev to start development environment")
+        print("Use --test to run tests")
+        print("Use --info to show project information")
         parser.print_help()
-        return 1
-    
-    return 0
+        return True
 
 if __name__ == "__main__":
-    exit(main())
+    try:
+        success = main()
+        sys.exit(0 if success else 1)
+    except KeyboardInterrupt:
+        print("\n🛑 Interrupted")
+        sys.exit(130)
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        sys.exit(1)

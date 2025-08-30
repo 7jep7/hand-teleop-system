@@ -111,6 +111,7 @@
                     <div class="space-y-2 text-sm">
                         <div>Processing Time: <span id="processingTime" class="font-mono text-green-400">-- ms</span></div>
                         <div>Frames Processed: <span id="framesProcessed" class="font-mono text-green-400">0</span></div>
+                        <div>Effective FPS: <span id="effectiveFps" class="font-mono text-blue-400">--</span></div>
                         <div>Hand Detected: <span id="handDetected" class="font-mono text-green-400">--</span></div>
                         <div>WebSocket Status: <span id="wsStatus" class="font-mono text-red-400">Disconnected</span></div>
                     </div>
@@ -148,6 +149,9 @@
         let frameCount = 0;
         let canvas = null;
         let ctx = null;
+        let streamInterval = null; // Track the interval for dynamic FPS updates
+        let lastFrameTime = Date.now();
+        let fpsHistory = [];
 
         // Elements
         const inputVideo = document.getElementById('inputVideo');
@@ -168,6 +172,24 @@
             const color = type === 'error' ? '#ef4444' : type === 'success' ? '#10b981' : '#10b981';
             consoleDiv.innerHTML += `<div style="color: ${color}">[${timestamp}] ${message}</div>`;
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        // Update FPS calculation
+        function updateEffectiveFPS() {
+            const now = Date.now();
+            const timeDelta = now - lastFrameTime;
+            lastFrameTime = now;
+            
+            const currentFPS = 1000 / timeDelta;
+            fpsHistory.push(currentFPS);
+            
+            // Keep only last 10 measurements for averaging
+            if (fpsHistory.length > 10) {
+                fpsHistory.shift();
+            }
+            
+            const avgFPS = fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length;
+            document.getElementById('effectiveFps').textContent = avgFPS.toFixed(1);
         }
 
         // Update status indicators
@@ -316,21 +338,35 @@
             updateStatus(document.getElementById('outputStatus'), 'processing', 'Processing');
             logToConsole('Started video streaming');
             
+            // Start the streaming loop
+            scheduleNextFrame();
+        }
+
+        function scheduleNextFrame() {
+            if (!isStreaming || !ws || ws.readyState !== WebSocket.OPEN) {
+                return;
+            }
+            
             const frameRate = parseInt(document.getElementById('frameRate').value);
             const interval = 1000 / frameRate;
             
-            const streamInterval = setInterval(() => {
-                if (!isStreaming || !ws || ws.readyState !== WebSocket.OPEN) {
-                    clearInterval(streamInterval);
-                    return;
-                }
-                
+            // Clear any existing timeout
+            if (streamInterval) {
+                clearTimeout(streamInterval);
+            }
+            
+            streamInterval = setTimeout(() => {
                 sendFrame();
+                scheduleNextFrame(); // Schedule the next frame
             }, interval);
         }
 
         function stopStreaming() {
             isStreaming = false;
+            if (streamInterval) {
+                clearTimeout(streamInterval);
+                streamInterval = null;
+            }
             if (ws && ws.readyState === WebSocket.OPEN) {
                 updateStatus(document.getElementById('outputStatus'), 'connected', 'Connected');
             }
@@ -338,6 +374,9 @@
 
         function sendFrame() {
             if (!inputVideo.videoWidth || !inputVideo.videoHeight) return;
+            
+            // Update FPS calculation
+            updateEffectiveFPS();
             
             // Create a temporary canvas to capture frame
             const tempCanvas = document.createElement('canvas');
@@ -368,6 +407,18 @@
         stopCameraBtn.addEventListener('click', stopCamera);
         connectWSBtn.addEventListener('click', connectWebSocket);
         disconnectWSBtn.addEventListener('click', disconnectWebSocket);
+        
+        // FPS dropdown change handler - provides real-time feedback
+        document.getElementById('frameRate').addEventListener('change', (e) => {
+            const fps = e.target.value;
+            logToConsole(`Frame rate changed to ${fps} FPS`);
+            
+            // If streaming is active, the change will take effect on the next frame
+            // due to our scheduleNextFrame() implementation
+            if (isStreaming) {
+                logToConsole(`New frame rate will take effect immediately`);
+            }
+        });
         
         document.getElementById('clearConsole').addEventListener('click', () => {
             consoleDiv.innerHTML = '';
