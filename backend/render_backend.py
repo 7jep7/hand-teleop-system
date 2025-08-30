@@ -620,47 +620,72 @@ async def websocket_live_tracking(websocket: WebSocket):
                         # Create annotated frame efficiently
                         annotated_frame = frame.copy()
                         
-                        # Optimized annotation drawing
+                        # Extract and visualize specific fingertip points for teleop
                         if hand_pose and hand_pose.get("landmarks"):
                             landmarks = hand_pose["landmarks"]
-                            
-                            # Pre-calculate drawing coordinates
                             h, w = frame.shape[:2]
-                            points = []
-                            for landmark in landmarks:
-                                x = int(landmark["x"] * w)
-                                y = int(landmark["y"] * h)
-                                points.append((x, y))
                             
-                            # Draw landmarks efficiently with fewer operations
-                            for i, (x, y) in enumerate(points):
-                                cv2.circle(annotated_frame, (x, y), 3, (0, 255, 0), -1)
+                            # Define the 4 key points for hand teleop:
+                            # - Thumb tip, Index tip, Index PIP (middle joint), Index MCP (base)
+                            key_points = {
+                                "thumb_tip": 4,      # Thumb tip
+                                "index_tip": 8,      # Index finger tip  
+                                "index_pip": 6,      # Index finger PIP joint (middle joint)
+                                "index_mcp": 5       # Index finger MCP joint (base connecting to palm)
+                            }
                             
-                            # Draw key connections only (reduce drawing operations)
-                            key_connections = [
-                                (4, 3), (3, 2), (2, 1), (1, 0),  # Thumb
-                                (8, 7), (7, 6), (6, 5),          # Index
-                                (12, 11), (11, 10), (10, 9),    # Middle
-                                (16, 15), (15, 14), (14, 13),   # Ring
-                                (20, 19), (19, 18), (18, 17),   # Pinky
-                                (0, 5), (5, 9), (9, 13), (13, 17)  # Palm base
-                            ]
+                            # Colors for each point
+                            colors = {
+                                "thumb_tip": (255, 0, 0),    # Blue for thumb tip
+                                "index_tip": (0, 255, 0),    # Green for index tip
+                                "index_pip": (0, 165, 255),  # Orange for index middle joint
+                                "index_mcp": (255, 255, 0)   # Cyan for base joint
+                            }
                             
-                            for conn in key_connections:
-                                if conn[0] < len(points) and conn[1] < len(points):
-                                    cv2.line(annotated_frame, points[conn[0]], points[conn[1]], (0, 255, 255), 1)
+                            # Draw the 4 key points
+                            detected_points = 0
+                            for point_name, landmark_idx in key_points.items():
+                                if landmark_idx < len(landmarks):
+                                    landmark = landmarks[landmark_idx]
+                                    x = int(landmark["x"] * w)
+                                    y = int(landmark["y"] * h)
+                                    
+                                    # Draw larger, more visible circles
+                                    color = colors[point_name]
+                                    cv2.circle(annotated_frame, (x, y), 8, color, -1)
+                                    cv2.circle(annotated_frame, (x, y), 10, (255, 255, 255), 2)  # White border
+                                    
+                                    # Add labels
+                                    label = point_name.replace("_", " ").title()
+                                    cv2.putText(annotated_frame, label, (x - 20, y - 15), 
+                                              cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+                                    detected_points += 1
                             
-                            # Highlight fingertips only
-                            fingertip_indices = [4, 8, 12, 16, 20]
-                            for tip_idx in fingertip_indices:
-                                if tip_idx < len(points):
-                                    cv2.circle(annotated_frame, points[tip_idx], 6, (255, 0, 0), -1)
+                            # Draw connection lines between key points if available
+                            if len(landmarks) >= 9:  # Ensure we have enough landmarks
+                                # Line from thumb tip to index base (grip span)
+                                thumb_tip = landmarks[4]
+                                index_base = landmarks[5]
+                                
+                                pt1 = (int(thumb_tip["x"] * w), int(thumb_tip["y"] * h))
+                                pt2 = (int(index_base["x"] * w), int(index_base["y"] * h))
+                                cv2.line(annotated_frame, pt1, pt2, (255, 0, 255), 2)  # Magenta line
+                                
+                                # Line from index base to index tip (finger extension)
+                                index_tip = landmarks[8]
+                                index_pip = landmarks[6]
+                                
+                                pt3 = (int(index_tip["x"] * w), int(index_tip["y"] * h))
+                                pt4 = (int(index_pip["x"] * w), int(index_pip["y"] * h))
+                                cv2.line(annotated_frame, pt2, pt4, (0, 255, 255), 2)  # Yellow line
+                                cv2.line(annotated_frame, pt4, pt3, (0, 255, 255), 2)  # Yellow line
                             
-                            # Simple status text
-                            cv2.putText(annotated_frame, "Hand Detected", (10, 25), 
+                            # Status text with tracking mode and point count
+                            status_text = f"Hand Teleop - {tracking_mode.upper()} ({detected_points}/4 points)"
+                            cv2.putText(annotated_frame, status_text, (10, 25), 
                                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                         else:
-                            cv2.putText(annotated_frame, "No Hand", (10, 25), 
+                            cv2.putText(annotated_frame, f"No Hand - {tracking_mode.upper()}", (10, 25), 
                                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                         
                         # Fast JPEG encoding with lower quality for speed
@@ -670,12 +695,42 @@ async def websocket_live_tracking(websocket: WebSocket):
                         
                         processing_time = (time.time() - start_time) * 1000
                         
+                        # Extract fingertip coordinates for teleop
+                        fingertip_coords = None
+                        if hand_pose and hand_pose.get("landmarks"):
+                            landmarks = hand_pose["landmarks"]
+                            if len(landmarks) >= 9:  # Ensure we have enough landmarks
+                                fingertip_coords = {
+                                    "thumb_tip": {
+                                        "x": landmarks[4]["x"],
+                                        "y": landmarks[4]["y"], 
+                                        "z": landmarks[4].get("z", 0.0)
+                                    },
+                                    "index_tip": {
+                                        "x": landmarks[8]["x"],
+                                        "y": landmarks[8]["y"],
+                                        "z": landmarks[8].get("z", 0.0)
+                                    },
+                                    "index_pip": {
+                                        "x": landmarks[6]["x"],
+                                        "y": landmarks[6]["y"],
+                                        "z": landmarks[6].get("z", 0.0)
+                                    },
+                                    "index_mcp": {
+                                        "x": landmarks[5]["x"],
+                                        "y": landmarks[5]["y"],
+                                        "z": landmarks[5].get("z", 0.0)
+                                    }
+                                }
+                        
                         # Create response
                         result = {
                             "success": True,
                             "timestamp": datetime.now().isoformat(),
                             "hand_detected": hand_pose is not None,
                             "hand_pose": hand_pose,
+                            "fingertip_coords": fingertip_coords,  # Add specific fingertip data
+                            "tracking_mode": tracking_mode,
                             "robot_joints": robot_joints,
                             "robot_pose": robot_pose,
                             "annotated_frame": f"data:image/jpeg;base64,{annotated_base64}",
@@ -839,7 +894,12 @@ async def process_hand_tracking_fast(frame: np.ndarray, robot_type: str, trackin
         if tracking_mode == "mediapipe":
             estimator = get_mediapipe_estimator()
         else:
+            # Try WILOR first, fallback to MediaPipe if not available
             estimator = get_wilor_estimator()
+            if estimator is None:
+                print(f"⚠️  WILOR not available, falling back to MediaPipe")
+                estimator = get_mediapipe_estimator()
+                tracking_mode = "mediapipe"  # Update tracking mode for response
         
         if estimator is None:
             # Return mock data if estimator not available

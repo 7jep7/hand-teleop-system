@@ -306,11 +306,23 @@
                 }
                 
                 // Update hand data
-                if (data.hand_pose && data.hand_pose.landmarks) {
-                    const landmarks = data.hand_pose.landmarks;
-                    let handDataHTML = '';
+                if (data.fingertip_coords) {
+                    // Display the 4 key teleop points
+                    let handDataHTML = 'Hand Teleop Key Points:\n';
+                    handDataHTML += `Thumb Tip: (${data.fingertip_coords.thumb_tip.x.toFixed(3)}, ${data.fingertip_coords.thumb_tip.y.toFixed(3)}, ${data.fingertip_coords.thumb_tip.z.toFixed(3)})\n`;
+                    handDataHTML += `Index Tip: (${data.fingertip_coords.index_tip.x.toFixed(3)}, ${data.fingertip_coords.index_tip.y.toFixed(3)}, ${data.fingertip_coords.index_tip.z.toFixed(3)})\n`;
+                    handDataHTML += `Index PIP: (${data.fingertip_coords.index_pip.x.toFixed(3)}, ${data.fingertip_coords.index_pip.y.toFixed(3)}, ${data.fingertip_coords.index_pip.z.toFixed(3)})\n`;
+                    handDataHTML += `Index MCP: (${data.fingertip_coords.index_mcp.x.toFixed(3)}, ${data.fingertip_coords.index_mcp.y.toFixed(3)}, ${data.fingertip_coords.index_mcp.z.toFixed(3)})\n`;
                     
-                    // Show fingertip positions
+                    // Add tracking mode info
+                    handDataHTML += `\nTracking Mode: ${data.tracking_mode || 'mediapipe'}`;
+                    
+                    document.getElementById('handData').textContent = handDataHTML;
+                } else if (data.hand_pose && data.hand_pose.landmarks) {
+                    // Fallback to showing fingertip positions from landmarks
+                    const landmarks = data.hand_pose.landmarks;
+                    let handDataHTML = 'Fallback - All Fingertips:\n';
+                    
                     const fingertips = [4, 8, 12, 16, 20];
                     const names = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'];
                     
