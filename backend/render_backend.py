@@ -879,6 +879,12 @@ def get_mediapipe_estimator():
 def get_wilor_estimator():
     """Get or initialize WiLoR estimator (singleton pattern)"""
     global _wilor_estimator
+    
+    # Check if WiLoR is disabled via environment variable
+    if os.environ.get("DISABLE_WILOR", "").lower() in ("true", "1", "yes"):
+        print("🚫 WiLoR disabled via DISABLE_WILOR environment variable")
+        return None
+        
     if _wilor_estimator is None:
         try:
             from core.hand_pose.factory import create_estimator
