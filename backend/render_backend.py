@@ -9,7 +9,21 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, validator
 from typing import Dict, Any, List, Optional, Literal
-import cv2
+
+# Robust OpenCV import for headless environments
+try:
+    import cv2
+    print("✅ OpenCV imported successfully")
+except ImportError as e:
+    print(f"❌ OpenCV import failed: {e}")
+    # For development/testing without OpenCV
+    class MockCV2:
+        IMREAD_COLOR = 1
+        COLOR_BGR2RGB = 4
+        def imdecode(self, *args, **kwargs): return None
+        def cvtColor(self, *args, **kwargs): return None
+    cv2 = MockCV2()
+
 import numpy as np
 import base64
 import json

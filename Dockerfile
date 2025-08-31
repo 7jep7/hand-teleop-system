@@ -3,12 +3,13 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install only essential system dependencies
+# Install system dependencies for headless OpenCV (no GUI/OpenGL)
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     libsm6 \
-    libxrender1 \
     libxext6 \
+    libxrender-dev \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies
@@ -21,9 +22,11 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
-# Set environment variables
+# Set environment variables for headless operation
 ENV DISABLE_WILOR=true
 ENV PYTHONPATH=/app
+ENV OPENCV_VIDEOIO_PRIORITY_MSMF=0
+ENV QT_QPA_PLATFORM=offscreen
 
 # Run the application
 CMD ["uvicorn", "backend.render_backend:app", "--host", "0.0.0.0", "--port", "8000"]
