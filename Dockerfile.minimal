@@ -1,21 +1,12 @@
-# Simplified Dockerfile for Render.com - Optimized for CV deployment
+# Ultra-minimal Dockerfile for Render.com - Maximum compatibility
 FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install only essential system dependencies
+# Install absolutely minimal dependencies
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
-    libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev \
-    libavcodec-dev \
-    libavformat-dev \
-    libswscale-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies

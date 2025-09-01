@@ -10,6 +10,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, validator
 from typing import Dict, Any, List, Optional, Literal
 
+# Import required modules first
+import numpy as np
+import base64
+import json
+import os
+import tempfile
+import gc
+import subprocess
+import sys
+import asyncio
+import time
+from datetime import datetime
+from pathlib import Path
+
 # Robust OpenCV import for headless environments
 try:
     # Set OpenCV to headless mode before importing
@@ -71,18 +85,6 @@ except Exception as e:
         
     cv2 = MockCV2()
 
-import numpy as np
-import base64
-import json
-import os
-import tempfile
-import gc
-import subprocess
-import sys
-import asyncio
-import time
-from datetime import datetime
-from pathlib import Path
 import uvicorn
 
 # Fix PYTHONPATH for imports (robust absolute path)
