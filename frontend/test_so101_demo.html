@@ -71,13 +71,16 @@
             const videoRef = React.useRef(null);
             const overlayRef = React.useRef(null);
 
-            // API Configuration
-            const API_CONFIG = {
-                BACKEND_URL: 'http://localhost:8000',
-                WS_URL: 'ws://localhost:8000',
-                RECONNECT_INTERVAL: 3000,
-                PING_INTERVAL: 30000,
-                REQUEST_TIMEOUT: 10000
+            // API Configuration - Dynamic based on selection
+            const getApiConfig = () => {
+                const backendType = document.querySelector('input[name="backend"]:checked')?.value || 'local';
+                return {
+                    BACKEND_URL: backendType === 'local' ? 'http://localhost:8000' : 'https://hand-teleop-api.onrender.com',
+                    WS_URL: backendType === 'local' ? 'ws://localhost:8000' : 'wss://hand-teleop-api.onrender.com',
+                    RECONNECT_INTERVAL: 3000,
+                    PING_INTERVAL: 30000,
+                    REQUEST_TIMEOUT: 10000
+                };
             };
 
                         // Joint configurations for different robots

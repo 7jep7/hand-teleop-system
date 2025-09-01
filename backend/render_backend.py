@@ -121,18 +121,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files for frontend
+# Mount static files for frontend testing
+static_path = project_root / "static"
 frontend_path = project_root / "frontend"
+
+# Mount static files under /static
+try:
+    if static_path.exists():
+        app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+        print(f"✅ Static files mounted from: {static_path}")
+except Exception as e:
+    print(f"Warning: Static files not mounted: {e}")
+
+# Mount frontend files under /frontend for development  
 try:
     if frontend_path.exists():
-        app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
-        print(f"✅ Frontend static files mounted from: {frontend_path}")
-    else:
-        print(f"Warning: Frontend directory not found at: {frontend_path}")
-except RuntimeError as e:
-    # Handle case where frontend directory doesn't exist or path is wrong
-    print(f"Warning: Frontend directory not found, static files not mounted: {e}")
-    pass
+        app.mount("/frontend", StaticFiles(directory=str(frontend_path)), name="frontend")
+        print(f"✅ Frontend dev files mounted from: {frontend_path}")
+except Exception as e:
+    print(f"Warning: Frontend dev files not mounted: {e}")
 
 # Pydantic models for request/response validation
 class RobotConfig(BaseModel):
@@ -1369,10 +1376,43 @@ if __name__ == "__main__":
 
 # ==================== COMPATIBILITY ENDPOINTS ====================
 
+# Serve frontend pages
 @app.get("/")
-async def get_index():
-    """Redirect to modern React demo interface"""
-    return HTMLResponse('<script>window.location.href="/react-demo";</script>')
+async def serve_index():
+    """Serve index.html as default page"""
+    static_path = project_root / "static" / "index.html"
+    if static_path.exists():
+        return FileResponse(static_path)
+    else:
+        return {
+            "message": "Hand Teleop System API",
+            "version": "1.0.1",
+            "status": "running",
+            "endpoints": {
+                "health": "/api/health",
+                "docs": "/docs", 
+                "websocket_tracking": "/api/tracking/live"
+            },
+            "description": "Real-time hand tracking API for robotic teleoperation"
+        }
+
+@app.get("/demo")
+async def serve_demo():
+    """Serve demo page"""
+    static_path = project_root / "static" / "index.html"
+    if static_path.exists():
+        return FileResponse(static_path)
+    else:
+        return {"message": "Demo page not found"}
+
+@app.get("/debug")
+async def serve_debug():
+    """Serve debug page"""
+    static_path = project_root / "static" / "debug_websocket.html"
+    if static_path.exists():
+        return FileResponse(static_path)
+    else:
+        return {"message": "Debug page not found"}
 
 @app.get("/health")
 async def legacy_health_check():
