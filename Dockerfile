@@ -1,37 +1,18 @@
-# Minimal Dockerfile for Render.com - Fast build
-FROM python:3.10-slim
+# Optimized Dockerfile for Render.com - OpenCV compatible
+FROM python:3.10
 
 WORKDIR /app
 
-# Install system dependencies for headless OpenCV (including OpenGL libraries)
+# Install essential system dependencies for OpenCV
 RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libgtk-3-0 \
-    libavcodec-dev \
-    libavformat-dev \
-    libswscale-dev \
-    libv4l-dev \
-    libxvidcore-dev \
-    libx264-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libtiff-dev \
-    gfortran \
-    openexr \
-    libatlas-base-dev \
-    python3-dev \
-    libtbb2 \
-    libtbb-dev \
-    libdc1394-22-dev \
-    libopenexr-dev \
-    libgstreamer-plugins-base1.0-dev \
-    libgstreamer1.0-dev \
+    libgstreamer1.0-0 \
+    libgstreamer-plugins-base1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies
@@ -49,7 +30,6 @@ ENV DISABLE_WILOR=true
 ENV PYTHONPATH=/app
 ENV OPENCV_VIDEOIO_PRIORITY_MSMF=0
 ENV QT_QPA_PLATFORM=offscreen
-ENV DISPLAY=:99
 ENV LIBGL_ALWAYS_INDIRECT=1
 ENV LIBGL_ALWAYS_SOFTWARE=1
 
