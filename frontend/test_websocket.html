@@ -82,6 +82,16 @@
         </div>
         
         <div class="controls">
+            <div style="margin-bottom: 15px;">
+                <label style="margin-right: 20px;">
+                    <input type="radio" name="backend" value="local" checked style="margin-right: 5px;">
+                    Local Backend (localhost:8000)
+                </label>
+                <label>
+                    <input type="radio" name="backend" value="deployed" style="margin-right: 5px;">
+                    Deployed Backend (hand-teleop-api.onrender.com)
+                </label>
+            </div>
             <button id="connect-btn">Connect WebSocket</button>
             <button id="start-camera-btn" disabled>Start Camera</button>
             <button id="stop-camera-btn" disabled>Stop Camera</button>
@@ -131,9 +141,14 @@
         }
 
         function connectWebSocket() {
-            log('Attempting to connect to ws://localhost:8000/api/tracking/live');
+            const backendType = document.querySelector('input[name="backend"]:checked').value;
+            const wsUrl = backendType === 'local' 
+                ? 'ws://localhost:8000/api/tracking/live'
+                : 'wss://hand-teleop-api.onrender.com/api/tracking/live';
             
-            ws = new WebSocket('ws://localhost:8000/api/tracking/live');
+            log(`Attempting to connect to ${wsUrl}`);
+            
+            ws = new WebSocket(wsUrl);
             
             ws.onopen = function() {
                 log('✅ WebSocket connected successfully!');

@@ -11,11 +11,25 @@ This guide provides precise instructions to integrate real-time hand tracking wi
 ---
 
 ## 🔗 **WebSocket Endpoint**
+
+### Development (Local Backend)
 ```
 ws://localhost:8000/api/tracking/live
 ```
 
-**Production URL:** Replace `localhost:8000` with your deployed server domain.
+### Production (Deployed Backend)
+```
+wss://hand-teleop-api.onrender.com/api/tracking/live
+```
+
+**Note:** Use `wss://` (secure WebSocket) for production HTTPS sites.
+
+### Testing Both Backends
+The frontend test files (`test_websocket.html`, `mvp-demo.html`) now support testing both backends:
+- Run frontend tests: `python3 -m http.server 3000 --directory frontend`
+- Open: http://localhost:3000/test_websocket.html
+- Use radio buttons to switch between local and deployed backends
+- Verify both work identically before production integration
 
 ---
 
