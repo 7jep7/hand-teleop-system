@@ -25,21 +25,40 @@
 └─────────────────────┘    └──────────────────────────┘
 ```
 
-## Deployed API Endpoints
+## API Reference
 
 ### Production Backend: `https://hand-teleop-api.onrender.com`
 
-#### **Core Endpoints**
+#### **Core System Endpoints**
 ```
 GET  /                       # Main demo interface
 GET  /api/health            # System health & OpenCV status  
-GET  /docs                  # Interactive API documentation
+GET  /docs                  # Interactive API documentation (Swagger UI)
 GET  /debug.html           # WebSocket debugging tool
+GET  /api/deployment-info   # Git commit & deployment details
+GET  /api/performance      # System performance statistics
 ```
 
-#### **Real-time Tracking**
+#### **Hand Tracking API**
 ```
-WebSocket: /api/tracking/live   # Live hand tracking stream
+POST /api/track             # Single-frame hand tracking
+WebSocket: /api/tracking/live   # Real-time hand tracking stream
+```
+
+#### **Robot Control API**
+```
+GET  /api/robots            # List available robot types
+POST /api/config/robot      # Configure robot settings
+GET  /api/robot/so101/info  # SO-101 robot information
+GET  /api/robot/so101/state # Current SO-101 joint state
+POST /api/robot/so101/joints # Set SO-101 joint positions
+GET  /api/assets/robot/so101/{file} # Robot asset files (URDF, STL)
+WebSocket: /api/robot/so101/simulation # Real-time SO-101 control
+```
+
+#### **Calibration & Utilities**
+```
+POST /api/calibration/start # Start camera calibration
 ```
 
 ## WebSocket Protocol Implementation
@@ -93,6 +112,235 @@ ws.send(JSON.stringify(message));
     }
 }
 ```
+
+## REST API Implementation
+
+### **Single-Frame Hand Tracking**
+
+For scenarios where real-time WebSocket streaming isn't needed, you can use the REST API for single-frame processing.
+
+#### **POST /api/track**
+
+**Request Format:**
+```javascript
+const response = await fetch('https://hand-teleop-api.onrender.com/api/track', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+        image_data: base64ImageData,  // Base64 encoded JPEG
+        robot_type: "so101",          // Optional: robot type
+        tracking_mode: "wilor"        // Optional: "wilor" or "mediapipe"
+    })
+});
+
+const result = await response.json();
+```
+
+**Response Format:**
+```json
+{
+    "success": true,
+    "timestamp": "2025-09-02T15:30:45.123Z",
+    "hand_detected": true,
+    "hand_pose": {
+        "fingertip_coords": {
+            "thumb_tip": { "x": 0.324, "y": 0.456, "z": 0.123 },
+            "index_tip": { "x": 0.567, "y": 0.234, "z": 0.089 },
+            "index_pip": { "x": 0.543, "y": 0.267, "z": 0.098 },
+            "index_mcp": { "x": 0.521, "y": 0.298, "z": 0.107 }
+        },
+        "gripper_state": "open",
+        "confidence": 0.95
+    },
+    "robot_joints": [0.1, -0.2, 0.3, 0.0, 0.5, -0.1],
+    "robot_pose": {
+        "position": {"x": 0.5, "y": 0.3, "z": 0.8},
+        "orientation": {"x": 0, "y": 0, "z": 0, "w": 1}
+    },
+    "processing_time_ms": 42.5,
+    "message": "Hand tracking completed successfully"
+}
+```
+
+### **System Health & Status**
+
+#### **GET /api/health**
+
+Monitor system status and dependencies:
+
+```javascript
+const health = await fetch('https://hand-teleop-api.onrender.com/api/health');
+const status = await health.json();
+
+// Response example:
+{
+    "status": "healthy",
+    "timestamp": "2025-09-02T15:30:45.123Z",
+    "version": "1.0.1",
+    "git_commit": "abc123def456",
+    "dependencies": {
+        "opencv": "status: working",
+        "numpy": "1.24.3",
+        "fastapi": "0.104.1",
+        "torch": "2.1.0",
+        "mediapipe": "0.10.7"
+    }
+}
+```
+
+#### **GET /api/performance**
+
+Get system performance metrics:
+
+```javascript
+const perf = await fetch('https://hand-teleop-api.onrender.com/api/performance');
+const metrics = await perf.json();
+
+// Response example:
+{
+    "stats": {
+        "total_requests": 1543,
+        "successful_requests": 1521,
+        "failed_requests": 22,
+        "average_processing_time_ms": 38.2,
+        "frames_processed": 15430
+    },
+    "system_info": {
+        "uptime_seconds": 86400,
+        "current_connections": 3,
+        "robot_config": {
+            "robot_type": "so101",
+            "settings": {"tracking_mode": "wilor"}
+        }
+    },
+    "timestamp": "2025-09-02T15:30:45.123Z"
+}
+```
+
+### **Robot Control API**
+
+#### **GET /api/robots**
+
+List available robot types:
+
+```javascript
+const robots = await fetch('https://hand-teleop-api.onrender.com/api/robots');
+const robotList = await robots.json();
+
+// Response example:
+{
+    "robots": [
+        {
+            "id": "so101",
+            "name": "SO-101 Gripper",
+            "description": "6-DOF robotic gripper with parallel jaws"
+        }
+    ],
+    "current_robot": "so101",
+    "total_count": 1
+}
+```
+
+#### **POST /api/config/robot**
+
+Configure robot settings:
+
+```javascript
+const config = await fetch('https://hand-teleop-api.onrender.com/api/config/robot', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        robot_type: "so101",
+        settings: {
+            tracking_mode: "mediapipe",
+            smoothing_factor: 0.8
+        }
+    })
+});
+
+const result = await config.json();
+// Response: { "success": true, "message": "Robot configured to so101", ... }
+```
+
+#### **SO-101 Specific Endpoints**
+
+**GET /api/robot/so101/info** - Robot specifications:
+```json
+{
+    "success": true,
+    "robot_info": {
+        "name": "SO-101",
+        "dof": 6,
+        "max_reach": 0.8,
+        "joint_limits": [
+            {"min": -1.57, "max": 1.57},
+            {"min": -1.57, "max": 1.57}
+        ]
+    },
+    "timestamp": "2025-09-02T15:30:45.123Z"
+}
+```
+
+**GET /api/robot/so101/state** - Current joint positions:
+```json
+{
+    "success": true,
+    "joint_state": {
+        "positions": [0.1, -0.2, 0.3, 0.0, 0.5, -0.1],
+        "velocities": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "effort": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    },
+    "timestamp": "2025-09-02T15:30:45.123Z"
+}
+```
+
+**POST /api/robot/so101/joints** - Set joint positions:
+```javascript
+const move = await fetch('https://hand-teleop-api.onrender.com/api/robot/so101/joints', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        positions: [0.2, -0.3, 0.4, 0.1, 0.6, -0.2],
+        smooth: true  // Optional: smooth motion
+    })
+});
+```
+
+### **Asset Serving**
+
+#### **GET /api/assets/robot/so101/{file_path}**
+
+Serve robot assets (URDF, STL, textures):
+
+```javascript
+// Example: Get robot URDF file
+const urdfUrl = 'https://hand-teleop-api.onrender.com/api/assets/robot/so101/robot.urdf';
+
+// Example: Get STL mesh files
+const baseStl = 'https://hand-teleop-api.onrender.com/api/assets/robot/so101/Base_SO101.stl';
+const handleStl = 'https://hand-teleop-api.onrender.com/api/assets/robot/so101/Handle_SO101.stl';
+```
+
+### **Error Handling**
+
+All API endpoints return consistent error formats:
+
+```json
+{
+    "detail": "Error description",
+    "status_code": 400
+}
+```
+
+Common status codes:
+- `200` - Success
+- `400` - Bad Request (invalid parameters)
+- `404` - Not Found (endpoint or resource)
+- `422` - Validation Error (invalid data format)
+- `500` - Internal Server Error
+- `503` - Service Unavailable (robot/tracking unavailable)
 
 ## Production Integration Examples
 
@@ -454,6 +702,7 @@ hand-teleop-system/
 
 For integrating with jonaspetersen.com:
 
+### **Real-time WebSocket Integration**
 - [ ] **Connect WebSocket**: `wss://hand-teleop-api.onrender.com/api/tracking/live`
 - [ ] **Request Camera**: Handle permissions gracefully
 - [ ] **Send Frames**: Base64 encoded JPEG at 15-20 FPS
@@ -462,6 +711,20 @@ For integrating with jonaspetersen.com:
 - [ ] **Test Connection**: Use debug tool to validate data flow
 - [ ] **Performance Monitor**: Track latency and frame rates
 
+### **REST API Integration**
+- [ ] **Health Check**: Test `GET /api/health` for system status
+- [ ] **Single Frame**: Use `POST /api/track` for occasional hand detection
+- [ ] **Robot Control**: Configure robots via `POST /api/config/robot`
+- [ ] **Performance Metrics**: Monitor via `GET /api/performance`
+- [ ] **Error Handling**: Implement proper HTTP status code handling
+- [ ] **Asset Loading**: Use `/api/assets/robot/so101/*` for 3D models
+
+### **Development & Testing**
+- [ ] **Local Testing**: Use `python main.py --dev` for local development
+- [ ] **Interactive Docs**: Access `/docs` for API exploration
+- [ ] **Debug Tools**: Use `/debug.html` for WebSocket testing
+- [ ] **CORS Validation**: Ensure frontend domain is whitelisted
+
 ## Support & Troubleshooting
 
 ### **Common Issues**
@@ -469,11 +732,38 @@ For integrating with jonaspetersen.com:
 2. **Camera Access Denied**: Implement permission request flow
 3. **High Latency**: Reduce frame rate or image quality
 4. **No Hand Detection**: Ensure good lighting and hand visibility
+5. **REST API 422 Error**: Check request data format and required fields
+6. **503 Service Unavailable**: Robot/tracking service temporarily down
+
+### **API Usage Patterns**
+
+**When to use WebSocket vs REST API:**
+
+- **WebSocket** (`/api/tracking/live`): 
+  - Real-time hand cursor/gesture control
+  - Continuous tracking for interactive UIs
+  - Live robot teleoperation
+  - High-frequency updates (15-30 FPS)
+
+- **REST API** (`/api/track`):
+  - Occasional gesture recognition
+  - Single-shot hand detection
+  - Batch processing
+  - Integration with forms/buttons
+
+**Performance Optimization:**
+- Use WebSocket for real-time, REST for sporadic use
+- Monitor `/api/performance` for system load
+- Implement client-side frame rate limiting
+- Cache robot configurations via `/api/config/robot`
 
 ### **Debug Resources**
-- **Debug Tool**: https://hand-teleop-api.onrender.com/debug.html
-- **API Documentation**: https://hand-teleop-api.onrender.com/docs
-- **Health Check**: https://hand-teleop-api.onrender.com/api/health
+- **WebSocket Debug Tool**: https://hand-teleop-api.onrender.com/debug.html
+- **Interactive API Documentation**: https://hand-teleop-api.onrender.com/docs
+- **System Health Check**: https://hand-teleop-api.onrender.com/api/health
+- **Performance Metrics**: https://hand-teleop-api.onrender.com/api/performance
+- **Deployment Info**: https://hand-teleop-api.onrender.com/api/deployment-info
+- **Available Robots**: https://hand-teleop-api.onrender.com/api/robots
 
 ---
 
