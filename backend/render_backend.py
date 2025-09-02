@@ -1396,23 +1396,32 @@ async def serve_index():
             "description": "Real-time hand tracking API for robotic teleoperation"
         }
 
-@app.get("/demo")
-async def serve_demo():
-    """Serve demo page"""
-    static_path = project_root / "static" / "index.html"
-    if static_path.exists():
-        return FileResponse(static_path)
+@app.get("/")
+async def serve_main_demo():
+    """Serve main demo page"""
+    frontend_path = project_root / "frontend" / "demo.html"
+    if frontend_path.exists():
+        return FileResponse(frontend_path)
     else:
         return {"message": "Demo page not found"}
 
-@app.get("/debug")
-async def serve_debug():
-    """Serve debug page"""
-    static_path = project_root / "static" / "debug_websocket.html"
-    if static_path.exists():
-        return FileResponse(static_path)
+@app.get("/demo.html")
+async def serve_demo_alt():
+    """Serve demo page (alternative route)"""
+    frontend_path = project_root / "frontend" / "demo.html"
+    if frontend_path.exists():
+        return FileResponse(frontend_path)
     else:
-        return {"message": "Debug page not found"}
+        return {"message": "Demo page not found"}
+
+@app.get("/debug.html")
+async def serve_debug():
+    """Serve debug tool"""
+    frontend_path = project_root / "frontend" / "debug.html"
+    if frontend_path.exists():
+        return FileResponse(frontend_path)
+    else:
+        return {"message": "Debug tool not found"}
 
 @app.get("/health")
 async def legacy_health_check():
@@ -1421,4 +1430,6 @@ async def legacy_health_check():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("render_backend:app", host="0.0.0.0", port=port, reload=False)
+    # Use minimal logging to reduce health check spam
+    uvicorn.run("render_backend:app", host="0.0.0.0", port=port, reload=False, 
+                log_level="warning", access_log=False)

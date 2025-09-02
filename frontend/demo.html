@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Tracking API Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            background: #1f2937; 
+            color: white; 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+        }
+        .video-container {
+            position: relative;
+            display: inline-block;
+        }
+        .status-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-connected { background: #10b981; color: white; }
+        .status-disconnected { background: #ef4444; color: white; }
+        .status-processing { background: #f59e0b; color: white; }
+    </style>
+</head>
+<body>
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6 text-center">Hand Tracking API Demo</h1>
+        <p class="text-gray-300 text-center mb-8">Real-time hand tracking with WebSocket streaming</p>
+        
+        <div class="grid lg:grid-cols-2 gap-6">
+            <!-- Camera Input -->
+            <div class="bg-gray-800 p-6 rounded-xl">
+                <h2 class="text-xl font-semibold mb-4">Camera Input</h2>
+                <div class="video-container">
+                    <video id="inputVideo" width="400" height="300" autoplay muted class="rounded-lg border-2 border-gray-600"></video>
+                    <div id="inputStatus" class="status-indicator status-disconnected">Camera Off</div>
+                </div>
+                <div class="mt-4 space-y-2">
+                    <button id="startCamera" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded">
+                        Start Camera
+                    </button>
+                    <button id="stopCamera" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded" disabled>
+                        Stop Camera
+                    </button>
+                </div>
+            </div>
+
+            <!-- WebSocket Output -->
+            <div class="bg-gray-800 p-6 rounded-xl">
+                <h2 class="text-xl font-semibold mb-4">Hand Tracking Output</h2>
+                <canvas id="outputCanvas" width="400" height="300" class="rounded-lg border-2 border-gray-600 bg-black"></canvas>
+                <div class="mt-4 space-y-2">
+                    <button id="connectWS" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded">
+                        Connect WebSocket
+                    </button>
+                    <button id="disconnectWS" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded" disabled>
+                        Disconnect WebSocket
+                    </button>
+                    <div id="wsStatus" class="text-sm text-gray-400 text-center">Disconnected</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Display -->
+        <div class="mt-8 bg-gray-800 p-6 rounded-xl">
+            <h2 class="text-xl font-semibold mb-4">Real-time Data</h2>
+            <div class="grid md:grid-cols-3 gap-4">
+                <div class="bg-gray-700 p-4 rounded">
+                    <h3 class="font-semibold text-green-400">FPS</h3>
+                    <div id="fpsDisplay" class="text-2xl font-mono">0</div>
+                </div>
+                <div class="bg-gray-700 p-4 rounded">
+                    <h3 class="font-semibold text-blue-400">Hands Detected</h3>
+                    <div id="handCount" class="text-2xl font-mono">0</div>
+                </div>
+                <div class="bg-gray-700 p-4 rounded">
+                    <h3 class="font-semibold text-yellow-400">Messages</h3>
+                    <div id="messageCount" class="text-2xl font-mono">0</div>
+                </div>
+            </div>
+            <pre id="dataOutput" class="mt-4 bg-black p-4 rounded text-xs overflow-auto h-32 text-green-400 font-mono"></pre>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let video = null;
+        let canvas = null;
+        let ctx = null;
+        let stream = null;
+        let messageCount = 0;
+        let fps = 0;
+        let lastFrameTime = 0;
+
+        // Get DOM elements
+        const startCameraBtn = document.getElementById('startCamera');
+        const stopCameraBtn = document.getElementById('stopCamera');
+        const connectWSBtn = document.getElementById('connectWS');
+        const disconnectWSBtn = document.getElementById('disconnectWS');
+        const inputVideo = document.getElementById('inputVideo');
+        const outputCanvas = document.getElementById('outputCanvas');
+        const inputStatus = document.getElementById('inputStatus');
+        const wsStatus = document.getElementById('wsStatus');
+        const fpsDisplay = document.getElementById('fpsDisplay');
+        const handCount = document.getElementById('handCount');
+        const messageCountDisplay = document.getElementById('messageCount');
+        const dataOutput = document.getElementById('dataOutput');
+
+        canvas = outputCanvas;
+        ctx = canvas.getContext('2d');
+        video = inputVideo;
+
+        // Camera controls
+        startCameraBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                video.srcObject = stream;
+                inputStatus.textContent = 'Camera Active';
+                inputStatus.className = 'status-indicator status-connected';
+                startCameraBtn.disabled = true;
+                stopCameraBtn.disabled = false;
+            } catch (error) {
+                console.error('Camera error:', error);
+                inputStatus.textContent = 'Camera Error';
+                inputStatus.className = 'status-indicator status-disconnected';
+            }
+        });
+
+        stopCameraBtn.addEventListener('click', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                stream = null;
+            }
+            inputStatus.textContent = 'Camera Off';
+            inputStatus.className = 'status-indicator status-disconnected';
+            startCameraBtn.disabled = false;
+            stopCameraBtn.disabled = true;
+        });
+
+        // WebSocket controls
+        connectWSBtn.addEventListener('click', () => {
+            const wsUrl = `ws://${window.location.host}/api/tracking/live`;
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                wsStatus.textContent = 'Connected';
+                wsStatus.className = 'text-green-400';
+                connectWSBtn.disabled = true;
+                disconnectWSBtn.disabled = false;
+                console.log('WebSocket connected');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleTrackingData(data);
+                    messageCount++;
+                    messageCountDisplay.textContent = messageCount;
+                    
+                    // Show latest data
+                    dataOutput.textContent = JSON.stringify(data, null, 2);
+                } catch (error) {
+                    console.error('Data parsing error:', error);
+                }
+            };
+            
+            ws.onclose = () => {
+                wsStatus.textContent = 'Disconnected';
+                wsStatus.className = 'text-red-400';
+                connectWSBtn.disabled = false;
+                disconnectWSBtn.disabled = true;
+                console.log('WebSocket disconnected');
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                wsStatus.textContent = 'Error';
+                wsStatus.className = 'text-red-400';
+            };
+        });
+
+        disconnectWSBtn.addEventListener('click', () => {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        });
+
+        function handleTrackingData(data) {
+            // Calculate FPS
+            const now = performance.now();
+            if (lastFrameTime > 0) {
+                fps = Math.round(1000 / (now - lastFrameTime));
+                fpsDisplay.textContent = fps;
+            }
+            lastFrameTime = now;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw hand data if available
+            if (data.hands && Array.isArray(data.hands)) {
+                handCount.textContent = data.hands.length;
+                
+                data.hands.forEach((hand, index) => {
+                    if (hand.landmarks) {
+                        drawHand(hand.landmarks, index);
+                    }
+                });
+            } else {
+                handCount.textContent = '0';
+            }
+        }
+
+        function drawHand(landmarks, handIndex) {
+            const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4'];
+            const color = colors[handIndex % colors.length];
+            
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = 2;
+
+            // Draw landmarks
+            landmarks.forEach((landmark, i) => {
+                const x = landmark.x * canvas.width;
+                const y = landmark.y * canvas.height;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Draw landmark numbers for debugging
+                ctx.fillStyle = 'white';
+                ctx.font = '8px Arial';
+                ctx.fillText(i.toString(), x + 5, y - 5);
+                ctx.fillStyle = color;
+            });
+
+            // Draw connections between landmarks
+            const connections = [
+                [0, 1], [1, 2], [2, 3], [3, 4],  // Thumb
+                [0, 5], [5, 6], [6, 7], [7, 8],  // Index
+                [0, 9], [9, 10], [10, 11], [11, 12],  // Middle
+                [0, 13], [13, 14], [14, 15], [15, 16],  // Ring
+                [0, 17], [17, 18], [18, 19], [19, 20],  // Pinky
+                [5, 9], [9, 13], [13, 17]  // Palm
+            ];
+
+            ctx.strokeStyle = color;
+            connections.forEach(([start, end]) => {
+                if (landmarks[start] && landmarks[end]) {
+                    const startX = landmarks[start].x * canvas.width;
+                    const startY = landmarks[start].y * canvas.height;
+                    const endX = landmarks[end].x * canvas.width;
+                    const endY = landmarks[end].y * canvas.height;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.stroke();
+                }
+            });
+        }
+
+        // Auto-start camera on page load
+        window.addEventListener('load', () => {
+            startCameraBtn.click();
+        });
+    </script>
+</body>
+</html>
