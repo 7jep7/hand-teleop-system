@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head><title>Minimal Camera Test</title></head>
+<body style="background:#000;color:#fff;font-family:monospace;padding:20px">
+<h1>MINIMAL Camera Test (No Processing)</h1>
+<p style="color:#ff6b6b">⚠️ This does ZERO processing - just displays camera feed</p>
+<video id="v" width="320" height="240" autoplay muted style="border:1px solid #fff"></video>
+<br><br>
+<button onclick="start()">Start</button>
+<button onclick="stop()">Stop</button>
+<div id="log" style="margin-top:10px;font-size:12px"></div>
+
+<script>
+let stream = null;
+let video = document.getElementById('v');
+let logEl = document.getElementById('log');
+
+function log(msg) {
+    logEl.innerHTML += '<br>' + new Date().toLocaleTimeString() + ': ' + msg;
+    console.log(msg);
+}
+
+async function start() {
+    try {
+        log('Requesting camera...');
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 320, height: 240, frameRate: 10 }
+        });
+        video.srcObject = stream;
+        log('Camera started - NO processing, NO encoding, NO canvas, NO websockets');
+    } catch (e) {
+        log('ERROR: ' + e.message);
+    }
+}
+
+function stop() {
+    if (stream) {
+        stream.getTracks().forEach(track => {
+            log('Stopping track: ' + track.kind);
+            track.stop();
+        });
+        stream = null;
+        video.srcObject = null;
+        log('All tracks stopped');
+    }
+}
+
+// Clean exit
+window.addEventListener('beforeunload', stop);
+</script>
+</body>
+</html>

@@ -149,3 +149,10 @@ The system is ready for production deployment and further development.
 **Last Updated**: 2025-08-29
 **Cleanup Version**: 1.0.0
 **Status**: Production Ready ✅
+
+## 2025-09-03 Additional Cleanup
+
+- Removed legacy `frontend_clean/` directory (temporary staging copy during earlier refactor). Canonical frontend assets now live only under `frontend/` plus landing page in `static/`.
+- Ensured no code paths referenced `frontend_clean/` before removal.
+- Remaining frontend entry points: `static/index.html` (landing) and `frontend/demo.html` (primary demo). Any future experimental pages should go under `frontend/experiments/` (git-ignored or clearly marked) to avoid duplication.
+

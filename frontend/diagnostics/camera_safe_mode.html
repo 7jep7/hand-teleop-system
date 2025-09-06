@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Camera Safe Mode - System Protection</title>
+<style>
+body{background:#1a1a1a;color:#fff;font-family:monospace;padding:20px;margin:0}
+.container{max-width:800px;margin:0 auto}
+.warning{background:#8b0000;padding:15px;border-radius:8px;margin:20px 0;border-left:5px solid #ff0000}
+.safe{background:#006400;padding:15px;border-radius:8px;margin:20px 0;border-left:5px solid #00ff00}
+.info{background:#1e3a8a;padding:15px;border-radius:8px;margin:20px 0;border-left:5px solid #3b82f6}
+button{padding:10px 20px;margin:10px 5px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer}
+button:disabled{background:#666;cursor:not-allowed}
+button.danger{background:#dc2626}
+button.safe{background:#059669}
+#log{background:#000;padding:10px;border-radius:4px;height:200px;overflow-y:auto;font-size:12px;margin:10px 0}
+.status{display:inline-block;padding:4px 8px;border-radius:12px;font-size:11px;margin:2px}
+.status.ok{background:#059669}
+.status.warn{background:#d97706}
+.status.error{background:#dc2626}
+#constraints{background:#374151;padding:10px;border-radius:4px;margin:10px 0}
+select,input{background:#374151;color:#fff;border:1px solid #6b7280;padding:4px 8px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🛡️ Camera Safe Mode</h1>
+
+<div class="warning">
+<strong>⚠️ CRITICAL SYSTEM PROTECTION MODE</strong><br>
+This tool implements safeguards to prevent camera freezes that can affect the entire system.
+Use this instead of the main demo until the root cause is identified.
+</div>
+
+<div class="info">
+<strong>Safety Features:</strong>
+<ul>
+<li>Maximum 10-second sessions with automatic cutoff</li>
+<li>Conservative constraints (low resolution, low framerate)</li>
+<li>Immediate track cleanup on any error</li>
+<li>No WebSocket streaming to external servers</li>
+<li>Emergency stop functionality</li>
+</ul>
+</div>
+
+<div id="constraints">
+<h3>Camera Constraints (Conservative Defaults)</h3>
+<label>Resolution: 
+<select id="resolution">
+<option value="160x120">160x120 (Safest)</option>
+<option value="320x240" selected>320x240 (Safe)</option>
+<option value="640x480">640x480 (Risky)</option>
+</select>
+</label>
+<label>Frame Rate: 
+<select id="framerate">
+<option value="5">5 FPS (Safest)</option>
+<option value="10" selected>10 FPS (Safe)</option>
+<option value="15">15 FPS (Moderate)</option>
+<option value="30">30 FPS (Risky)</option>
+</select>
+</label>
+<label>Session Limit: 
+<input type="number" id="sessionLimit" value="10" min="5" max="30" style="width:60px"> seconds
+</label>
+</div>
+
+<div>
+<button id="startSafe" class="safe">🛡️ Start Safe Test</button>
+<button id="emergencyStop" class="danger" disabled>🚨 EMERGENCY STOP</button>
+<button id="systemCheck">🔍 System Check</button>
+<button id="clearLog">Clear Log</button>
+</div>
+
+<div>
+<video id="video" width="320" height="240" style="border:2px solid #666;background:#000;margin:10px 0"></video>
+<div>Status: <span id="status" class="status error">Stopped</span></div>
+</div>
+
+<div id="log"></div>
+
+<div class="safe" id="recovery" style="display:none">
+<h3>🔧 System Recovery Steps</h3>
+<ol>
+<li><button onclick="killAllCameraProcesses()">Kill Camera Processes</button></li>
+<li><button onclick="resetVideoDevices()">Reset Video Devices</button></li>
+<li><button onclick="restartBrowser()">Restart Browser</button></li>
+<li><strong>If still frozen: Restart system</strong></li>
+</ol>
+</div>
+
+</div>
+
+<script>
+let stream = null;
+let video = document.getElementById('video');
+let isRunning = false;
+let sessionTimer = null;
+let trackCleanupTimer = null;
+let logs = [];
+
+function log(msg, type = 'info') {
+    const timestamp = new Date().toISOString().split('T')[1].replace('Z', '');
+    const entry = `[${timestamp}] ${msg}`;
+    logs.push(entry);
+    
+    const logEl = document.getElementById('log');
+    const div = document.createElement('div');
+    div.textContent = entry;
+    div.style.color = type === 'error' ? '#ff6b6b' : type === 'warn' ? '#fbbf24' : '#fff';
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+    
+    console.log(`[SAFE_MODE] ${msg}`);
+}
+
+function updateStatus(text, type) {
+    const statusEl = document.getElementById('status');
+    statusEl.textContent = text;
+    statusEl.className = `status ${type}`;
+}
+
+function getConstraints() {
+    const resolution = document.getElementById('resolution').value;
+    const framerate = parseInt(document.getElementById('framerate').value);
+    const [width, height] = resolution.split('x').map(Number);
+    
+    return {
+        video: {
+            width: { exact: width },
+            height: { exact: height },
+            frameRate: { exact: framerate },
+            facingMode: 'user'
+        }
+    };
+}
+
+function emergencyCleanup() {
+    log('🚨 EMERGENCY CLEANUP INITIATED', 'error');
+    
+    if (sessionTimer) {
+        clearTimeout(sessionTimer);
+        sessionTimer = null;
+    }
+    
+    if (trackCleanupTimer) {
+        clearTimeout(trackCleanupTimer);
+        trackCleanupTimer = null;
+    }
+    
+    if (stream) {
+        try {
+            stream.getTracks().forEach(track => {
+                log(`Stopping track: ${track.kind} ${track.readyState}`, 'warn');
+                track.stop();
+            });
+            stream = null;
+            log('All tracks stopped', 'warn');
+        } catch (e) {
+            log(`Error stopping tracks: ${e.message}`, 'error');
+        }
+    }
+    
+    if (video) {
+        try {
+            video.srcObject = null;
+            video.load(); // Force reset
+            log('Video element reset', 'warn');
+        } catch (e) {
+            log(`Error resetting video: ${e.message}`, 'error');
+        }
+    }
+    
+    isRunning = false;
+    updateStatus('Emergency Stopped', 'error');
+    document.getElementById('startSafe').disabled = false;
+    document.getElementById('emergencyStop').disabled = true;
+    
+    // Show recovery options
+    document.getElementById('recovery').style.display = 'block';
+}
+
+async function startSafeTest() {
+    if (isRunning) return;
+    
+    try {
+        log('🛡️ Starting safe camera test...', 'info');
+        isRunning = true;
+        updateStatus('Starting...', 'warn');
+        
+        document.getElementById('startSafe').disabled = true;
+        document.getElementById('emergencyStop').disabled = false;
+        
+        const constraints = getConstraints();
+        log(`Constraints: ${JSON.stringify(constraints)}`, 'info');
+        
+        // Request camera with timeout
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('getUserMedia timeout')), 5000)
+        );
+        
+        const cameraPromise = navigator.mediaDevices.getUserMedia(constraints);
+        
+        stream = await Promise.race([cameraPromise, timeoutPromise]);
+        
+        if (!stream) {
+            throw new Error('No stream returned');
+        }
+        
+        log(`Stream acquired: ${stream.getTracks().length} tracks`, 'info');
+        
+        // Bind emergency handlers to track
+        stream.getTracks().forEach(track => {
+            track.onended = () => {
+                log(`Track ended unexpectedly: ${track.kind}`, 'error');
+                emergencyCleanup();
+            };
+            track.onmute = () => {
+                log(`Track muted: ${track.kind}`, 'warn');
+            };
+        });
+        
+        video.srcObject = stream;
+        await video.play();
+        
+        updateStatus('Running (Safe Mode)', 'ok');
+        log('✅ Camera started successfully', 'info');
+        
+        // Set session limit
+        const sessionLimit = parseInt(document.getElementById('sessionLimit').value) * 1000;
+        sessionTimer = setTimeout(() => {
+            log(`⏰ Session limit reached (${sessionLimit/1000}s), auto-stopping`, 'warn');
+            emergencyCleanup();
+        }, sessionLimit);
+        
+        // Defensive cleanup timer (backup)
+        trackCleanupTimer = setTimeout(() => {
+            log('🛡️ Defensive cleanup timer triggered', 'warn');
+            emergencyCleanup();
+        }, sessionLimit + 2000);
+        
+    } catch (error) {
+        log(`❌ Error: ${error.message}`, 'error');
+        emergencyCleanup();
+    }
+}
+
+async function systemCheck() {
+    log('🔍 Running system check...', 'info');
+    
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        log(`Found ${videoDevices.length} video devices`, 'info');
+        
+        videoDevices.forEach((device, i) => {
+            log(`Device ${i}: ${device.label || 'Unknown'} (${device.deviceId.substr(0, 8)}...)`, 'info');
+        });
+        
+        // Test basic constraints
+        const testConstraints = { video: { width: 160, height: 120 } };
+        log('Testing basic constraints...', 'info');
+        
+        const testStream = await navigator.mediaDevices.getUserMedia(testConstraints);
+        log('✅ Basic constraints work', 'info');
+        
+        testStream.getTracks().forEach(track => track.stop());
+        log('✅ Track cleanup successful', 'info');
+        
+    } catch (error) {
+        log(`❌ System check failed: ${error.message}`, 'error');
+    }
+}
+
+function killAllCameraProcesses() {
+    log('🔪 Killing camera processes...', 'warn');
+    // This is a placeholder - actual implementation would need backend support
+    alert('This requires manual intervention:\n1. Open Task Manager\n2. End all camera-related processes\n3. Check for "v4l2" or camera drivers');
+}
+
+function resetVideoDevices() {
+    log('🔄 Resetting video devices...', 'warn');
+    alert('Manual steps:\n1. Open terminal\n2. Run: sudo rmmod uvcvideo\n3. Run: sudo modprobe uvcvideo\n4. Restart browser');
+}
+
+function restartBrowser() {
+    log('🔄 Restarting browser...', 'warn');
+    alert('Please close ALL browser tabs and restart the browser completely.');
+}
+
+// Event handlers
+document.getElementById('startSafe').onclick = startSafeTest;
+document.getElementById('emergencyStop').onclick = emergencyCleanup;
+document.getElementById('systemCheck').onclick = systemCheck;
+document.getElementById('clearLog').onclick = () => {
+    document.getElementById('log').innerHTML = '';
+    logs = [];
+};
+
+// Global emergency handler
+window.addEventListener('beforeunload', () => {
+    if (stream) {
+        emergencyCleanup();
+    }
+});
+
+// Prevent accidental navigation
+window.addEventListener('beforeunload', (e) => {
+    if (isRunning) {
+        e.preventDefault();
+        e.returnValue = 'Camera is running. Are you sure you want to leave?';
+    }
+});
+
+log('🛡️ Safe mode initialized', 'info');
+</script>
+</body>
+</html>

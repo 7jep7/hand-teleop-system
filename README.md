@@ -13,6 +13,7 @@ A robust, production-grade hand tracking and robot control system that enables i
 - **⚡ Robust error handling** - Graceful fallbacks and comprehensive diagnostics
 - **🎮 Live demo interface** - Browser-based control with Three.js 3D visualization
 - **🛡️ Resource management** - Production-grade CPU/memory optimization
+- **🌍 Browser compatibility** - Chrome bug mitigation and Firefox optimization
 
 ## 🚀 Quick Start
 
@@ -43,6 +44,28 @@ python3 main.py --info             # Show project information
 ```bash
 curl http://localhost:8000/api/health
 ```
+
+## 🌐 Browser Compatibility
+
+| Browser | Status | Notes |
+|---------|--------|-------|
+| **Firefox** | ✅ Recommended | Most stable, optimal performance |
+| **Chrome** | ⚠️ Caution | May cause camera freezing (see recovery) |
+| **Safari** | 🔬 Testing | Limited testing on macOS |
+| **Edge** | 🔬 Testing | Chromium-based, similar to Chrome |
+
+### Chrome Bug Recovery
+Chrome's VideoCaptureService can cause system-wide camera freezing:
+
+```bash
+# Quick recovery for Chrome issues
+./scripts/recovery/chrome_camera_recovery.sh
+
+# Emergency system-wide recovery
+./scripts/recovery/emergency_camera_recovery.sh
+```
+
+**Recommendation**: Use Firefox for production deployments and development.
 
 ## 📖 Documentation
 

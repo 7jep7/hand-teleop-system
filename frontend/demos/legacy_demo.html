@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Tracking API Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            background: #1f2937; 
+            color: white; 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+        }
+        .video-container {
+            position: relative;
+            display: inline-block;
+        }
+        .status-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-connected { background: #10b981; color: white; }
+        .status-disconnected { background: #ef4444; color: white; }
+        .status-processing { background: #f59e0b; color: white; }
+    </style>
+</head>
+<body>
+    <div class="max-w-4xl mx-auto">
+        <!-- Browser Compatibility Warning -->
+        <div id="chromeWarning" class="hidden bg-red-900 border border-red-700 p-4 rounded-lg mb-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-red-300">Chrome Browser Warning</h3>
+                    <p class="mt-1 text-sm text-red-200">
+                        Chrome has known issues with intensive camera operations that can freeze your system.
+                        <strong>Firefox is recommended</strong> for this demo.
+                        <a href="chrome_safe_demo.html" class="underline">Try Chrome-safe version</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <h1 class="text-3xl font-bold mb-6 text-center">Hand Tracking API Demo</h1>
+        <p class="text-gray-300 text-center mb-8">Real-time hand tracking with WebSocket streaming</p>
+        
+        <div class="grid lg:grid-cols-2 gap-6">
+            <!-- Camera Input -->
+            <div class="bg-gray-800 p-6 rounded-xl">
+                <h2 class="text-xl font-semibold mb-4">Camera Input</h2>
+                <div class="video-container">
+                    <video id="inputVideo" width="400" height="300" autoplay muted playsinline class="rounded-lg border-2 border-gray-600"></video>
+                    <div id="inputStatus" class="status-indicator status-disconnected">Camera Off</div>
+                </div>
+                <div class="mt-4 space-y-2">
+                    <button id="startCamera" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded">
+                        Start Camera
+                    </button>
+                    <button id="stopCamera" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded" disabled>
+                        Stop Camera
+                    </button>
+                    <div class="text-xs text-gray-400 mt-2 space-y-1 bg-gray-900 p-2 rounded">
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" id="autoRecoveryToggle" checked>
+                            <span>Auto Recovery</span>
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <span>Freeze Threshold (s)</span>
+                            <input id="freezeThresholdInput" type="number" value="4.5" min="2" max="15" step="0.5" class="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5" />
+                        </label>
+                        <div id="freezeInfo" class="text-[10px] text-gray-500">Adjust if false positives.</div>
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" id="fallbackProbeToggle" checked>
+                            <span>Fallback Probe</span>
+                        </label>
+                        <div class="text-[10px] text-gray-500">Probes camera when stalled instead of restarting.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WebSocket Output -->
+            <div class="bg-gray-800 p-6 rounded-xl">
+                <h2 class="text-xl font-semibold mb-4">Hand Tracking Output</h2>
+                <canvas id="outputCanvas" width="400" height="300" class="rounded-lg border-2 border-gray-600 bg-black"></canvas>
+                
+                <!-- Backend Selection -->
+                <div class="mt-4 mb-4">
+                    <h3 class="text-sm font-semibold mb-2">Backend Selection:</h3>
+                    <div class="flex gap-4">
+                        <label class="flex items-center">
+                            <input type="radio" name="backend" value="local" checked class="mr-2">
+                            <span class="text-sm">Local Backend (port 8000)</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="radio" name="backend" value="deployed" class="mr-2">
+                            <span class="text-sm">Deployed Backend</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="mt-4 space-y-2">
+                    <button id="connectWS" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded">
+                        Connect WebSocket
+                    </button>
+                    <button id="disconnectWS" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded" disabled>
+                        Disconnect WebSocket
+                    </button>
+                    <div id="wsStatus" class="text-sm text-gray-400 text-center">Disconnected</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Display -->
+        <div class="mt-8 bg-gray-800 p-6 rounded-xl">
+            <h2 class="text-xl font-semibold mb-4">Real-time Data</h2>
+            <div class="grid md:grid-cols-3 gap-4">
+                <div class="bg-gray-700 p-4 rounded">
+                    <h3 class="font-semibold text-green-400">FPS</h3>
+                    <div id="fpsDisplay" class="text-2xl font-mono">0</div>
+                </div>
+                <div class="bg-gray-700 p-4 rounded">
+                    <h3 class="font-semibold text-blue-400">Hands Detected</h3>
+                    <div id="handCount" class="text-2xl font-mono">0</div>
+                </div>
+                <div class="bg-gray-700 p-4 rounded">
+                    <h3 class="font-semibold text-yellow-400">Messages</h3>
+                    <div id="messageCount" class="text-2xl font-mono">0</div>
+                </div>
+            </div>
+            <pre id="dataOutput" class="mt-4 bg-black p-4 rounded text-xs overflow-auto h-32 text-green-400 font-mono"></pre>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let video = null;
+        let canvas = null;
+        let ctx = null;
+        let stream = null;
+        let messageCount = 0;
+        let fps = 0;
+        let lastFrameTime = 0;
+    let sendingFrames = false;
+    let frameRequestId = null;
+    let captureCanvas = null;
+    let captureCtx = null;
+    let TARGET_SEND_FPS = 10; // adaptive
+    let lastSendTime = 0;
+    let inFlight = false; // prevent piling up frames while previous still processing
+    let lastProcessingTime = 0;
+    const MAX_BUFFERED_BYTES = 1_000_000; // apply backpressure if bufferedAmount high
+        let diagnosticsInterval = null;
+        let lastVideoTime = 0;
+        let lastVideoAdvanceTs = performance.now();
+        let freezeRecoveryAttempts = 0;
+        const MAX_RECOVERY_ATTEMPTS = 3;
+    let freezeThresholdMs = 4500; // configurable
+    let autoRecoveryEnabled = false; // user wants detection ONLY
+    const freezeEvents = [];
+    let lastRafTime = performance.now();
+    let mainThreadStallMs = 0;
+    const errorsPanel = document.createElement('div');
+    errorsPanel.style.position = 'fixed';
+    errorsPanel.style.top = '8px';
+    errorsPanel.style.right = '8px';
+    errorsPanel.style.background = 'rgba(30,30,30,0.85)';
+    errorsPanel.style.color = '#fbbf24';
+    errorsPanel.style.padding = '6px 8px';
+    errorsPanel.style.fontFamily = 'monospace';
+    errorsPanel.style.fontSize = '11px';
+    errorsPanel.style.lineHeight = '1.3em';
+    errorsPanel.style.maxWidth = '300px';
+    errorsPanel.style.maxHeight = '260px';
+    errorsPanel.style.overflowY = 'auto';
+    errorsPanel.style.border = '1px solid #444';
+    errorsPanel.style.borderRadius = '4px';
+    errorsPanel.innerHTML = '<b>Freeze / Error Events</b><br><span style="color:#888">None yet</span>';
+    document.body.appendChild(errorsPanel);
+        const diagnosticsBox = document.createElement('div');
+        diagnosticsBox.style.position = 'fixed';
+        diagnosticsBox.style.bottom = '8px';
+        diagnosticsBox.style.right = '8px';
+        diagnosticsBox.style.background = 'rgba(0,0,0,0.6)';
+        diagnosticsBox.style.padding = '6px 8px';
+        diagnosticsBox.style.fontFamily = 'monospace';
+        diagnosticsBox.style.fontSize = '11px';
+        diagnosticsBox.style.lineHeight = '1.2em';
+        diagnosticsBox.style.border = '1px solid #333';
+        diagnosticsBox.style.borderRadius = '4px';
+        diagnosticsBox.style.maxWidth = '240px';
+        diagnosticsBox.innerHTML = 'Diagnostics initializing...';
+        document.body.appendChild(diagnosticsBox);
+
+        function updateDiagnostics() {
+            if (!video) return;
+            const track = stream ? stream.getVideoTracks()[0] : null;
+            const videoTime = video.currentTime;
+            const now = performance.now();
+            if (videoTime !== lastVideoTime) {
+                lastVideoAdvanceTs = now;
+                lastVideoTime = videoTime;
+            }
+            const stalledForMs = now - lastVideoAdvanceTs;
+            const frozen = stalledForMs > freezeThresholdMs; // configurable
+            diagnosticsBox.innerHTML = `Cam: ${stream ? 'ON' : 'OFF'} | ReadyState: ${video.readyState}<br>` +
+                `Dims: ${video.videoWidth || 0}x${video.videoHeight || 0} | Time: ${videoTime.toFixed(2)}s<br>` +
+                `Track: ${track ? track.readyState : 'none'} | FPS Target: ${TARGET_SEND_FPS}<br>` +
+                `InFlight: ${inFlight} | Proc(ms): ${lastProcessingTime.toFixed(1)}<br>` +
+                `Buffered: ${ws ? ws.bufferedAmount : 0} | Frozen: ${frozen} | MainStall(ms): ${mainThreadStallMs.toFixed(0)}<br>` +
+                `Recovery: OFF`;
+
+            if (frozen && stream) {
+                recordFreezeEvent('video_stalled', {
+                    stalledForMs,
+                    readyState: video.readyState,
+                    trackState: track ? track.readyState : 'none',
+                    bufferedAmount: ws ? ws.bufferedAmount : 0,
+                    lastProcessingTime,
+                    targetFps: TARGET_SEND_FPS,
+                    inFlight,
+                    mainThreadStallMs
+                });
+            }
+        }
+
+        // Removed automatic recovery: we now only detect and log
+        function attemptFreezeRecovery() { /* intentionally noop */ }
+
+        function recordFreezeEvent(kind, details) {
+            const ts = new Date().toISOString();
+            const snapshot = {
+                ts,
+                kind,
+                details
+            };
+            // Deduplicate if same kind within last second
+            const last = freezeEvents[freezeEvents.length - 1];
+            if (last && last.kind === kind && (Date.now() - Date.parse(last.ts)) < 1000) return;
+            freezeEvents.push(snapshot);
+            if (freezeEvents.length > 50) freezeEvents.shift();
+            renderFreezeEvents();
+            log(`Freeze detected (${kind}) – diagnostics captured.`);
+        }
+
+        function renderFreezeEvents() {
+            if (!freezeEvents.length) {
+                errorsPanel.innerHTML = '<b>Freeze / Error Events</b><br><span style="color:#888">None yet</span>';
+                return;
+            }
+            errorsPanel.innerHTML = '<b>Freeze / Error Events</b><br>' + freezeEvents.slice(-8).map(ev => {
+                const d = ev.details || {};
+                return `<div style="margin-bottom:4px;">${ev.ts.split('T')[1].replace('Z','')} ${ev.kind}<br><span style="color:#999">stall=${(d.stalledForMs||0).toFixed?d.stalledForMs.toFixed(0):d.stalledForMs}ms rs=${d.readyState} track=${d.trackState} buf=${d.bufferedAmount} inflight=${d.inFlight}</span></div>`;
+            }).join('');
+        }
+
+        function startDiagnostics() {
+            if (diagnosticsInterval) return;
+            diagnosticsInterval = setInterval(updateDiagnostics, 1000);
+        }
+        function stopDiagnostics() {
+            if (diagnosticsInterval) clearInterval(diagnosticsInterval);
+            diagnosticsInterval = null;
+        }
+        const logArea = document.createElement('div');
+        logArea.style.fontSize = '10px';
+        logArea.style.maxHeight = '120px';
+        logArea.style.overflowY = 'auto';
+        logArea.style.padding = '4px';
+        logArea.style.background = '#111';
+        logArea.style.border = '1px solid #333';
+        logArea.style.marginTop = '6px';
+        logArea.style.fontFamily = 'monospace';
+        document.body.appendChild(logArea);
+
+        function log(msg, ...rest) {
+            console.log('[DEMO]', msg, ...rest);
+            const line = document.createElement('div');
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logArea.appendChild(line);
+            if (logArea.children.length > 200) {
+                logArea.removeChild(logArea.firstChild);
+            }
+        }
+
+        // Get DOM elements
+        const startCameraBtn = document.getElementById('startCamera');
+        const stopCameraBtn = document.getElementById('stopCamera');
+        const connectWSBtn = document.getElementById('connectWS');
+        const disconnectWSBtn = document.getElementById('disconnectWS');
+        const inputVideo = document.getElementById('inputVideo');
+        const outputCanvas = document.getElementById('outputCanvas');
+        const inputStatus = document.getElementById('inputStatus');
+        const wsStatus = document.getElementById('wsStatus');
+        const fpsDisplay = document.getElementById('fpsDisplay');
+        const handCount = document.getElementById('handCount');
+        const messageCountDisplay = document.getElementById('messageCount');
+        const dataOutput = document.getElementById('dataOutput');
+
+        canvas = outputCanvas;
+        ctx = canvas.getContext('2d');
+        video = inputVideo;
+
+        // Camera controls
+        function stopCameraInternal() {
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+                stream = null;
+            }
+            video.srcObject = null;
+            inputStatus.textContent = 'Camera Off';
+            inputStatus.className = 'status-indicator status-disconnected';
+            startCameraBtn.disabled = false;
+            stopCameraBtn.disabled = true;
+        }
+
+        startCameraBtn.addEventListener('click', async () => {
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('getUserMedia not supported in this browser context');
+                }
+                log('Requesting camera...');
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: {ideal: 640}, height: {ideal: 480}, facingMode: 'user' },
+                    audio: false
+                });
+                video.srcObject = stream;
+                // Ensure metadata loaded before playing
+                await new Promise(res => {
+                    if (video.readyState >= 1) return res();
+                    video.onloadedmetadata = () => res();
+                });
+                await video.play().catch(e => log('video.play() rejected (may be autoplay policy, user interaction needed)', e));
+                log(`Camera started: ${video.videoWidth}x${video.videoHeight}`);
+                inputStatus.textContent = 'Camera Active';
+                inputStatus.className = 'status-indicator status-connected';
+                startCameraBtn.disabled = true;
+                stopCameraBtn.disabled = false;
+                // If WS already connected and not sending, start loop
+                if (ws && ws.readyState === WebSocket.OPEN && !sendingFrames) {
+                    sendingFrames = true;
+                    startFrameLoop();
+                }
+            } catch (error) {
+                console.error('Camera error:', error);
+                log('Camera error: ' + error.message);
+                inputStatus.textContent = 'Camera Error';
+                inputStatus.className = 'status-indicator status-disconnected';
+            }
+        });
+
+        stopCameraBtn.addEventListener('click', () => {
+            stopCameraInternal();
+            freezeRecoveryAttempts = 0;
+        });
+
+        // WebSocket controls
+        connectWSBtn.addEventListener('click', () => {
+            // Get selected backend
+            const selectedBackend = document.querySelector('input[name="backend"]:checked').value;
+            
+            let wsUrl;
+            if (selectedBackend === 'local') {
+                // Always use port 8000 for local backend
+                wsUrl = 'ws://localhost:8000/api/tracking/live';
+            } else {
+                // Use deployed backend
+                wsUrl = 'wss://hand-teleop-api.onrender.com/api/tracking/live';
+            }
+            
+            console.log('Connecting to:', wsUrl);
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                wsStatus.textContent = 'Connected';
+                wsStatus.className = 'text-green-400';
+                connectWSBtn.disabled = true;
+                disconnectWSBtn.disabled = false;
+                log('WebSocket connected');
+
+                // Prepare capture canvas (offscreen)
+                if (!captureCanvas) {
+                    captureCanvas = document.createElement('canvas');
+                    captureCanvas.width = video.videoWidth || 640;
+                    captureCanvas.height = video.videoHeight || 480;
+                    captureCtx = captureCanvas.getContext('2d');
+                }
+
+                // Start frame sending loop if camera active
+                if (stream && !sendingFrames) {
+                    sendingFrames = true;
+                    startFrameLoop();
+                }
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'tracking_result' && data.data) {
+                        // free in-flight slot now that server responded
+                        inFlight = false;
+                        if (typeof data.data.processing_time_ms === 'number') {
+                            lastProcessingTime = data.data.processing_time_ms;
+                            // Simple adaptive FPS: target so that network+processing ~= frame interval
+                            // Keep between 5 and 15 FPS
+                            const idealFps = Math.min(15, Math.max(5, Math.round(1000 / Math.max(80, lastProcessingTime * 1.3))));
+                            TARGET_SEND_FPS = idealFps;
+                        }
+                        handleTrackingData(data.data);
+                    } else if (data.type === 'error') {
+                        log('Server error: ' + data.message);
+                    } else if (data.type === 'pong') {
+                        // ignore
+                    } else {
+                        // legacy / unknown format fallback
+                        handleTrackingData(data);
+                    }
+                    messageCount++;
+                    messageCountDisplay.textContent = messageCount;
+                    
+                    // Show latest data
+                    dataOutput.textContent = JSON.stringify(data, null, 2);
+                } catch (error) {
+                    console.error('Data parsing error:', error);
+                }
+            };
+            
+            ws.onclose = () => {
+                wsStatus.textContent = 'Disconnected';
+                wsStatus.className = 'text-red-400';
+                connectWSBtn.disabled = false;
+                disconnectWSBtn.disabled = true;
+                log('WebSocket disconnected');
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                log('WebSocket error: ' + error?.message);
+                wsStatus.textContent = 'Error';
+                wsStatus.className = 'text-red-400';
+            };
+        });
+
+        disconnectWSBtn.addEventListener('click', () => {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            stopFrameLoop();
+        });
+
+        function handleTrackingData(result) {
+            // result structure (tracking_result.data):
+            // { hand_pose: { landmarks: [...] }, annotated_frame: dataURI, fingertip_coords, processing_time_ms, ... }
+            // Calculate FPS
+            const now = performance.now();
+            if (lastFrameTime > 0) {
+                fps = Math.round(1000 / (now - lastFrameTime));
+                fpsDisplay.textContent = fps;
+            }
+            lastFrameTime = now;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            let landmarks = null;
+            if (result && result.hand_pose && Array.isArray(result.hand_pose.landmarks)) {
+                landmarks = result.hand_pose.landmarks;
+            } else if (result && Array.isArray(result.landmarks)) { // fallback legacy
+                landmarks = result.landmarks;
+            }
+
+            if (landmarks) {
+                handCount.textContent = '1';
+                drawHand(landmarks, 0);
+            } else {
+                handCount.textContent = '0';
+            }
+
+            // If server returns annotated frame image, draw it first as background
+            if (result && result.annotated_frame) {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    if (landmarks) {
+                        drawHand(landmarks, 0); // redraw overlay on top
+                    }
+                };
+                img.src = result.annotated_frame;
+            }
+        }
+
+        function drawHand(landmarks, handIndex) {
+            const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4'];
+            const color = colors[handIndex % colors.length];
+            
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = 2;
+
+            // Draw landmarks
+            landmarks.forEach((landmark, i) => {
+                const x = landmark.x * canvas.width;
+                const y = landmark.y * canvas.height;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Draw landmark numbers for debugging
+                ctx.fillStyle = 'white';
+                ctx.font = '8px Arial';
+                ctx.fillText(i.toString(), x + 5, y - 5);
+                ctx.fillStyle = color;
+            });
+
+            // Draw connections between landmarks
+            const connections = [
+                [0, 1], [1, 2], [2, 3], [3, 4],  // Thumb
+                [0, 5], [5, 6], [6, 7], [7, 8],  // Index
+                [0, 9], [9, 10], [10, 11], [11, 12],  // Middle
+                [0, 13], [13, 14], [14, 15], [15, 16],  // Ring
+                [0, 17], [17, 18], [18, 19], [19, 20],  // Pinky
+                [5, 9], [9, 13], [13, 17]  // Palm
+            ];
+
+            ctx.strokeStyle = color;
+            connections.forEach(([start, end]) => {
+                if (landmarks[start] && landmarks[end]) {
+                    const startX = landmarks[start].x * canvas.width;
+                    const startY = landmarks[start].y * canvas.height;
+                    const endX = landmarks[end].x * canvas.width;
+                    const endY = landmarks[end].y * canvas.height;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.stroke();
+                }
+            });
+        }
+
+        function startFrameLoop() {
+            const loop = (timestamp) => {
+                if (!sendingFrames || !ws || ws.readyState !== WebSocket.OPEN || !stream) {
+                    return; // stop naturally
+                }
+
+                const now = performance.now();
+                const interval = 1000 / TARGET_SEND_FPS;
+                if (!inFlight && (now - lastSendTime) >= interval) {
+                    if (video.videoWidth > 0) sendCurrentFrame();
+                    lastSendTime = now;
+                }
+                frameRequestId = requestAnimationFrame(loop);
+            };
+            frameRequestId = requestAnimationFrame(loop);
+        }
+
+        function stopFrameLoop() {
+            sendingFrames = false;
+            if (frameRequestId) cancelAnimationFrame(frameRequestId);
+            frameRequestId = null;
+        }
+
+        function sendCurrentFrame() {
+            if (!captureCtx || !video.videoWidth || inFlight) return;
+            if (ws.bufferedAmount > MAX_BUFFERED_BYTES) {
+                // Backpressure: skip this frame
+                if (messageCount % 20 === 0) log(`Skipping frame, bufferedAmount=${ws.bufferedAmount}`);
+                return;
+            }
+            // Resize if needed
+            if (captureCanvas.width !== video.videoWidth || captureCanvas.height !== video.videoHeight) {
+                captureCanvas.width = video.videoWidth;
+                captureCanvas.height = video.videoHeight;
+            }
+            try {
+                captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+            } catch (e) {
+                log('drawImage failed (video not ready yet)');
+                return;
+            }
+            inFlight = true;
+            // Use async toBlob to avoid blocking main thread with synchronous JPEG encode
+            captureCanvas.toBlob(blob => {
+                if (!blob) { inFlight = false; return; }
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    try {
+                        const dataUrl = reader.result;
+                        ws.send(JSON.stringify({
+                            type: 'image',
+                            data: dataUrl,
+                            tracking_mode: 'mediapipe',
+                            robot_type: 'so101'
+                        }));
+                        if (messageCount % 10 === 0) log(`Sent frame (fps target ${TARGET_SEND_FPS})`);
+                    } catch (e) {
+                        inFlight = false; // allow retry
+                        log('Failed to send frame: ' + e.message);
+                    }
+                };
+                reader.readAsDataURL(blob);
+            }, 'image/jpeg', 0.6); // slightly lower quality for speed
+        }
+
+        // Auto-start camera on page load
+        window.addEventListener('load', () => {
+            // Removed auto-start to ensure user gesture; enable if desired:
+            // startCameraBtn.click();
+            startDiagnostics();
+        });
+
+        // Settings bindings
+        const freezeThresholdInput = document.getElementById('freezeThresholdInput');
+        const autoRecoveryToggle = document.getElementById('autoRecoveryToggle');
+        if (freezeThresholdInput) {
+            freezeThresholdInput.addEventListener('change', () => {
+                freezeThresholdMs = parseFloat(freezeThresholdInput.value) * 1000;
+                log('Freeze threshold set to ' + freezeThresholdMs + ' ms');
+            });
+        }
+        if (autoRecoveryToggle) {
+            autoRecoveryToggle.checked = false;
+            autoRecoveryToggle.addEventListener('change', () => {
+                autoRecoveryEnabled = autoRecoveryToggle.checked;
+                log('Auto recovery toggled (currently ' + (autoRecoveryEnabled? 'ON':'OFF') + ') – still only logging by default.');
+            });
+        }
+        const fallbackProbeToggle = document.getElementById('fallbackProbeToggle');
+        let fallbackProbeEnabled = true;
+        if (fallbackProbeToggle) {
+            fallbackProbeToggle.addEventListener('change', () => {
+                fallbackProbeEnabled = fallbackProbeToggle.checked;
+                log('Fallback probe ' + (fallbackProbeEnabled ? 'enabled' : 'disabled'));
+            });
+        }
+
+        // requestVideoFrameCallback enhancement for more accurate stall detection (if supported)
+        if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+            const monitorFrame = () => {
+                if (!video) return;
+                video.requestVideoFrameCallback((_now, meta) => {
+                    lastVideoAdvanceTs = performance.now();
+                    // Optionally capture metadata for debugging
+                    if (meta && meta.mediaTime) lastVideoTime = meta.mediaTime;
+                    if (stream) monitorFrame();
+                });
+            };
+            monitorFrame();
+            log('Using requestVideoFrameCallback for frame monitoring');
+        }
+
+        // Main thread stall monitor
+        (function monitorRaf(){
+            const now = performance.now();
+            const delta = now - lastRafTime;
+            lastRafTime = now;
+            mainThreadStallMs = delta > 100 ? delta : 0; // highlight long gaps
+            requestAnimationFrame(monitorRaf);
+        })();
+
+        // Periodic fallback probe: when stalled, attempt lightweight frame grab without altering stream
+        async function fallbackProbe() {
+            if (!stream || !fallbackProbeEnabled) return;
+            const track = stream.getVideoTracks()[0];
+            if (!track) return;
+            const settings = track.getSettings ? track.getSettings() : {};
+            const constraints = track.getConstraints ? track.getConstraints() : {};
+            const stalledForMs = performance.now() - lastVideoAdvanceTs;
+            if (stalledForMs < freezeThresholdMs) return; // not stalled enough
+            // Use ImageCapture if available
+            try {
+                if (typeof ImageCapture !== 'undefined') {
+                    const ic = new ImageCapture(track);
+                    const bitmap = await ic.grabFrame();
+                    // If grabFrame succeeds, update advance ts manually
+                    lastVideoAdvanceTs = performance.now();
+                    recordFreezeEvent('probe_success', {width: bitmap.width, height: bitmap.height});
+                    return;
+                }
+            } catch (e) {
+                recordFreezeEvent('probe_error', {message: e.message});
+            }
+            // If we reach here, probe not possible/successful; log extended diagnostics once
+            recordFreezeEvent('stalled_diagnostics', {
+                constraints,
+                settings,
+                stalledForMs,
+                readyState: video.readyState,
+                trackState: track.readyState
+            });
+        }
+        setInterval(fallbackProbe, 3000);
+
+        // Browser compatibility detection
+        function detectBrowser() {
+            const ua = navigator.userAgent;
+            const isChrome = /Chrome/.test(ua) && !/Edg|Firefox/.test(ua);
+            const isFirefox = /Firefox/.test(ua);
+            
+            if (isChrome) {
+                document.getElementById('chromeWarning').classList.remove('hidden');
+                log('⚠️  Chrome detected - showing compatibility warning');
+                
+                // Add extra safety measures for Chrome
+                if (typeof window.chromeRecoveryWarned === 'undefined') {
+                    window.chromeRecoveryWarned = true;
+                    setTimeout(() => {
+                        if (confirm('Chrome detected! This demo may freeze your camera.\n\nFor safety, would you like to switch to the Chrome-safe version?')) {
+                            window.location.href = 'chrome_safe_demo.html';
+                        }
+                    }, 2000);
+                }
+            } else if (isFirefox) {
+                log('✅ Firefox detected - optimal browser for camera operations');
+            } else {
+                log(`🔍 Browser: ${ua.split(' ')[0]} - compatibility unknown`);
+            }
+        }
+        
+        // Run browser detection on load
+        detectBrowser();
+    </script>
+</body>
+</html>
