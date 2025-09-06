@@ -896,33 +896,53 @@ async def start_camera_calibration():
 
 @app.get("/web", response_class=FileResponse)
 async def get_web_interface():
-    """Serve the SO-101 simulation interface"""
+    """Serve the main web interface"""
     import os
-    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "web", "so101_simulation.html")
+    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "web", "web_interface.html")
     if os.path.exists(frontend_path):
         return FileResponse(frontend_path)
     else:
-        raise HTTPException(status_code=404, detail="SO-101 simulation interface not found")
+        raise HTTPException(status_code=404, detail="Web interface not found")
 
 @app.get("/react-demo", response_class=FileResponse)
 async def get_react_demo():
-    """Serve the modern SO-101 React demo interface"""
+    """Serve the Chrome-safe demo interface"""
     import os
-    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "test_so101_demo.html")
+    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "demos", "chrome_safe_demo.html")
     if os.path.exists(frontend_path):
         return FileResponse(frontend_path)
     else:
-        raise HTTPException(status_code=404, detail="React demo interface not found")
+        raise HTTPException(status_code=404, detail="Chrome-safe demo interface not found")
+
+@app.get("/demo", response_class=FileResponse)
+async def get_demo():
+    """Serve the Chrome-safe demo (main demo route)"""
+    import os
+    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "demos", "chrome_safe_demo.html")
+    if os.path.exists(frontend_path):
+        return FileResponse(frontend_path)
+    else:
+        raise HTTPException(status_code=404, detail="Chrome-safe demo not found")
+
+@app.get("/legacy-demo", response_class=FileResponse)
+async def get_legacy_demo():
+    """Serve the legacy demo interface"""
+    import os
+    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "demos", "legacy_demo.html")
+    if os.path.exists(frontend_path):
+        return FileResponse(frontend_path)
+    else:
+        raise HTTPException(status_code=404, detail="Legacy demo not found")
 
 @app.get("/so101-simulation", response_class=FileResponse)
 async def get_so101_simulation():
-    """Serve the SO-101 simulation interface (alternative route)"""
+    """Serve the main web interface (alternative route)"""
     import os
-    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "web", "so101_simulation.html")
+    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "web", "web_interface.html")
     if os.path.exists(frontend_path):
         return FileResponse(frontend_path)
     else:
-        raise HTTPException(status_code=404, detail="SO-101 simulation interface not found")
+        raise HTTPException(status_code=404, detail="Web interface not found")
 
 @app.get("/stl-test", response_class=FileResponse)
 async def get_stl_test():
@@ -1407,12 +1427,12 @@ async def serve_main_demo():
 
 @app.get("/demo.html")
 async def serve_demo_alt():
-    """Serve demo page (alternative route)"""
-    frontend_path = project_root / "frontend" / "demo.html"
+    """Serve legacy demo page (alternative route)"""
+    frontend_path = project_root / "frontend" / "demos" / "legacy_demo.html"
     if frontend_path.exists():
         return FileResponse(frontend_path)
     else:
-        return {"message": "Demo page not found"}
+        return {"message": "Legacy demo page not found"}
 
 @app.get("/debug.html")
 async def serve_debug():

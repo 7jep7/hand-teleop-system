@@ -1,13 +1,66 @@
-# 🔧 Scripts
+# 🔧 Scripts Directory
 
-> **⚠️ DEPRECATION NOTICE**: Most scripts are being phased out in favor of the unified `main.py` entry point.
+Organized scripts for development, deployment, and maintenance.
 
-## Current Scripts
+## 🚀 **Development Scripts**
 
-### `run_web_api.sh` (Legacy)
-- **Status**: Deprecated
-- **Replacement**: `python main.py --start`
-- **Purpose**: Production server with resource management
+### **Start Scripts**
+- **`start_dev.sh`** - Full development environment (backend + frontend)
+- **`start_backend.sh`** - Backend server only
+- **`start_local.sh`** - Local development setup
+
+Usage:
+```bash
+# Full development environment
+./scripts/start_dev.sh
+
+# Backend only
+./scripts/start_backend.sh
+```
+
+## 🛠️ **Utility Scripts**
+
+### **Setup & Environment**
+- **`setup.sh`** - Initial project setup
+- **`monitor_resources.py`** - Resource monitoring tool
+
+### **Development Tools**
+- **`run_gui.sh`** - Run GUI application
+- **`run_web_api.sh`** - Legacy web API runner (use `python main.py --start`)
+
+### **Deployment**
+- **`trigger_deploy.sh`** - Trigger deployment process
+
+### **Data Processing**
+- **`convert_step_to_gltf.py`** - Convert STEP files to GLTF format
+- **`mount_conda_drive.sh`** - Mount conda environment drive
+
+## 🚨 **Recovery Scripts**
+
+### **Emergency Recovery**
+- **`recovery/chrome_camera_recovery.sh`** - Chrome camera bug recovery
+- **`recovery/emergency_camera_recovery.sh`** - System-wide camera recovery
+
+Usage:
+```bash
+# Chrome camera issues
+./scripts/recovery/chrome_camera_recovery.sh
+
+# System-wide camera problems
+./scripts/recovery/emergency_camera_recovery.sh
+```
+
+## ⚠️ **Migration Notice**
+
+Most functionality has been unified under `main.py`:
+
+- **Instead of**: `./scripts/run_web_api.sh`
+- **Use**: `python main.py --start`
+
+- **Instead of**: `./scripts/start_dev.sh` 
+- **Use**: `python main.py --dev`
+
+See `python main.py --help` for all options.
 
 ### `setup.sh`
 - **Status**: Active

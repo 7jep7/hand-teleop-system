@@ -64,7 +64,9 @@ class TestRunner:
             ("GET", "/api/health", None),
             ("GET", "/api/robots", None),
             ("GET", "/api/performance", None),
-            ("GET", "/web", None),  # Changed from /demo to /web
+            ("GET", "/web", None),  # Main web interface
+            ("GET", "/demo", None),  # Chrome-safe demo
+            ("GET", "/legacy-demo", None),  # Legacy demo
             ("POST", "/api/config/robot", {"robot_type": "so101"}),
         ]
         
