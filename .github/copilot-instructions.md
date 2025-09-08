@@ -1,16 +1,13 @@
 # GitHub Copilot Instructions for Hand Teleop System
 
-## Environment Setup
+## Environment Setup & Core Commands
+**CRITICAL**: Always run conda activation AND commands in a single terminal session:
 ```bash
-conda activate hand-teleop  # Always activate this environment first
+conda activate hand-teleop && python3 main.py --dev       # Development mode (start here)
+conda activate hand-teleop && python3 main.py --test      # Run tests
+conda activate hand-teleop && python3 run_tests.py --unit # Specific test categories
 ```
-
-## Core Commands
-```bash
-python3 main.py --dev       # Development mode (start here)
-python3 main.py --test      # Run tests
-python3 run_tests.py --unit # Specific test categories
-```
+**Never split these into separate commands** - the second command will run in a fresh terminal without the conda environment!
 
 ## Key Architecture Patterns
 
