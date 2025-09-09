@@ -1,19 +1,9 @@
 services:
   - type: web
     name: hand-teleop-api
-    runtime: python3
-    buildCommand: |
-      python -m pip install --upgrade pip
-      pip install -r requirements-deploy.txt
-    startCommand: uvicorn backend.render_backend:app --host 0.0.0.0 --port $PORT
+    runtime: docker
     plan: free
     autoDeploy: true
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.10
-      - key: DISABLE_WILOR
-        value: "true"
-      - key: DISABLE_SO101
-        value: "true"
-      - key: DEPLOYMENT_MODE
-        value: "true"
+      - key: PORT
+        value: 8000
