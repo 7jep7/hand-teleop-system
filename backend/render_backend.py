@@ -906,23 +906,23 @@ async def get_web_interface():
 
 @app.get("/react-demo", response_class=FileResponse)
 async def get_react_demo():
-    """Serve the Chrome-safe demo interface"""
+    """Serve the main demo interface (alternative route)"""
     import os
-    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "demos", "chrome_safe_demo.html")
+    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "demo.html")
     if os.path.exists(frontend_path):
         return FileResponse(frontend_path)
     else:
-        raise HTTPException(status_code=404, detail="Chrome-safe demo interface not found")
+        raise HTTPException(status_code=404, detail="Main demo interface not found")
 
 @app.get("/demo", response_class=FileResponse)
 async def get_demo():
-    """Serve the Chrome-safe demo (main demo route)"""
+    """Serve the main demo (Chrome-safe version)"""
     import os
-    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "demos", "chrome_safe_demo.html")
+    frontend_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "demo.html")
     if os.path.exists(frontend_path):
         return FileResponse(frontend_path)
     else:
-        raise HTTPException(status_code=404, detail="Chrome-safe demo not found")
+        raise HTTPException(status_code=404, detail="Main demo not found")
 
 @app.get("/legacy-demo", response_class=FileResponse)
 async def get_legacy_demo():
@@ -1427,21 +1427,12 @@ async def serve_main_demo():
 
 @app.get("/demo.html")
 async def serve_demo_alt():
-    """Serve legacy demo page (alternative route)"""
-    frontend_path = project_root / "frontend" / "demos" / "legacy_demo.html"
+    """Serve main dual-camera testing interface"""
+    frontend_path = project_root / "frontend" / "demo.html"
     if frontend_path.exists():
         return FileResponse(frontend_path)
     else:
-        return {"message": "Legacy demo page not found"}
-
-@app.get("/debug.html")
-async def serve_debug():
-    """Serve debug tool"""
-    frontend_path = project_root / "frontend" / "debug.html"
-    if frontend_path.exists():
-        return FileResponse(frontend_path)
-    else:
-        return {"message": "Debug tool not found"}
+        return {"message": "Demo page not found"}
 
 @app.get("/health")
 async def legacy_health_check():

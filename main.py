@@ -324,7 +324,6 @@ def development_mode():
     print("📋 Health check: http://localhost:8000/api/health")
     print("🌐 Frontend: http://localhost:3000")
     print("🎯 Main Demo: http://localhost:8000/ (or http://localhost:3000/demo.html)")
-    print("� Debug Tool: http://localhost:8000/debug.html (or http://localhost:3000/debug.html)")
     print("=" * 60)
     print("💡 Press Ctrl+C to stop all servers")
     print()

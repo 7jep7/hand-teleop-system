@@ -34,7 +34,7 @@
 GET  /                       # Main demo interface
 GET  /api/health            # System health & OpenCV status  
 GET  /docs                  # Interactive API documentation (Swagger UI)
-GET  /debug.html           # WebSocket debugging tool
+GET  /demo.html            # Main dual-camera demo interface
 GET  /api/deployment-info   # Git commit & deployment details
 GET  /api/performance      # System performance statistics
 ```
@@ -516,7 +516,8 @@ python main.py --dev
 ```
 Backend API:     http://localhost:8000
 Testing Demo:    http://localhost:8000/         # Main demo interface
-Debug Tool:      http://localhost:8000/debug.html # WebSocket debugging
+Main Demo:       http://localhost:8000/       # Chrome-safe demo
+Testing Tool:    http://localhost:8000/testing.html # Dual-camera testing
 API Docs:        http://localhost:8000/docs     # Interactive documentation
 Health Check:    http://localhost:8000/api/health
 Frontend Server: http://localhost:3000         # Static file server
@@ -651,7 +652,7 @@ curl https://hand-teleop-api.onrender.com/api/health
 ```
 
 ### **WebSocket Testing**
-Use the debug tool at `https://hand-teleop-api.onrender.com/debug.html` to:
+Use the testing interface at `https://hand-teleop-api.onrender.com/testing.html` to:
 - Test WebSocket connectivity
 - Monitor real-time data flow
 - Debug message formatting
@@ -688,8 +689,9 @@ hand-teleop-system/
 ├── backend/
 │   └── render_backend.py      # FastAPI backend with WebSocket
 ├── frontend/
-│   ├── demo.html             # Main testing interface
-│   └── debug.html           # WebSocket debugging tool
+│   ├── demo.html             # Main dual-camera demo interface
+│   ├── archived/             # Archived old interfaces
+│   └── index.html           # Static overview page
 ├── docs/
 │   └── WEB_INTEGRATION.md   # This documentation
 ├── main.py                  # Development workflow manager
@@ -722,7 +724,7 @@ For integrating with jonaspetersen.com:
 ### **Development & Testing**
 - [ ] **Local Testing**: Use `python main.py --dev` for local development
 - [ ] **Interactive Docs**: Access `/docs` for API exploration
-- [ ] **Debug Tools**: Use `/debug.html` for WebSocket testing
+- [ ] **Main Demo**: Access the dual-camera interface at `/` or `/demo.html`
 - [ ] **CORS Validation**: Ensure frontend domain is whitelisted
 
 ## Support & Troubleshooting
@@ -758,7 +760,7 @@ For integrating with jonaspetersen.com:
 - Cache robot configurations via `/api/config/robot`
 
 ### **Debug Resources**
-- **WebSocket Debug Tool**: https://hand-teleop-api.onrender.com/debug.html
+- **Main Demo**: https://hand-teleop-api.onrender.com/
 - **Interactive API Documentation**: https://hand-teleop-api.onrender.com/docs
 - **System Health Check**: https://hand-teleop-api.onrender.com/api/health
 - **Performance Metrics**: https://hand-teleop-api.onrender.com/api/performance

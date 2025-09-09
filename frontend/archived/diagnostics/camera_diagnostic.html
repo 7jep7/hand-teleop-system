@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Camera Diagnostic Minimal</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+ body{background:#111;color:#eee;font-family:system-ui,Arial,sans-serif;margin:0;padding:16px}
+ h1{font-size:18px;margin:0 0 12px}
+ button{padding:6px 12px;margin:4px 4px 4px 0;background:#2563eb;color:#fff;border:0;border-radius:4px;cursor:pointer}
+ button:disabled{opacity:.4;cursor:not-allowed}
+ #videoBox{position:relative;display:inline-block}
+ video{background:#000;border:1px solid #444;border-radius:4px}
+ #stats, #events{font:11px/1.3 monospace;white-space:pre-wrap;background:#1e1e1e;padding:8px;border:1px solid #333;border-radius:4px;max-width:420px;max-height:240px;overflow:auto}
+ #layout{display:flex;flex-wrap:wrap;gap:16px}
+ .tag{display:inline-block;background:#333;padding:2px 6px;border-radius:12px;font-size:10px;margin:2px}
+ .warn{color:#fbbf24}
+ .error{color:#f87171}
+ .ok{color:#34d399}
+</style>
+</head>
+<body>
+<h1>Camera Diagnostic (Root Cause Focus)</h1>
+<div id="layout">
+  <div>
+    <div id="videoBox">
+      <video id="vid" playsinline autoplay muted></video>
+    </div>
+    <div style="margin-top:8px">
+      <button id="startBtn">Start</button>
+      <button id="stopBtn" disabled>Stop</button>
+      <button id="toggleMetricsBtn" disabled>Metrics Loop</button>
+      <button id="enumerateBtn">Enumerate Devices</button>
+      <button id="snapshotBtn" disabled>Snapshot</button>
+    </div>
+  </div>
+  <div>
+    <div id="stats">(stats)</div>
+    <div id="events" style="margin-top:8px">(events)</div>
+  </div>
+</div>
+<script>
+let stream=null;let video=document.getElementById('vid');
+let frameCount=0;let lastFrameTs=performance.now();let lastVideoTime=0;let stalledMs=0;
+let metricsLoop=false;let metricsHandle=null;let rVFC_supported = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+let longTasks=[];let trackRef=null;let lastSettings={};let frameIntervals=[];let freezeThresholdMs=4500;
+const statsEl=document.getElementById('stats');const eventsEl=document.getElementById('events');
+const startBtn=document.getElementById('startBtn');const stopBtn=document.getElementById('stopBtn');
+const toggleMetricsBtn=document.getElementById('toggleMetricsBtn');const enumerateBtn=document.getElementById('enumerateBtn');
+const snapshotBtn=document.getElementById('snapshotBtn');
+
+function logEvent(msg, cls){const line=document.createElement('div');if(cls) line.className=cls;line.textContent=new Date().toISOString().split('T')[1].replace('Z','')+' '+msg;eventsEl.appendChild(line);eventsEl.scrollTop=eventsEl.scrollHeight;}
+
+// Long task observer
+if('PerformanceObserver' in window){try{const po=new PerformanceObserver(list=>{for(const e of list.getEntries()){longTasks.push({start:e.startTime,duration:e.duration});if(e.duration>100) logEvent('LongTask '+e.duration.toFixed(1)+'ms','warn');}});po.observe({entryTypes:['longtask']});}catch(e){logEvent('LongTask observer error '+e.message,'error')}}
+
+defaultConstraints();
+function defaultConstraints(){return {video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30},facingMode:'user'}}}
+
+startBtn.onclick=async()=>{try{logEvent('Requesting camera');stream=await navigator.mediaDevices.getUserMedia(defaultConstraints());trackRef=stream.getVideoTracks()[0];video.srcObject=stream;await waitMetadata();await video.play();logEvent('Camera started');bindTrackEvents(trackRef);startBtn.disabled=true;stopBtn.disabled=false;toggleMetricsBtn.disabled=false;snapshotBtn.disabled=false;frameCount=0;lastFrameTs=performance.now();lastVideoTime=0;stalledMs=0;frameIntervals.length=0;if(rVFC_supported) scheduleFrame();else legacyFrameLoop();updateStats();}catch(e){logEvent('Start error '+e.message,'error')}};
+
+stopBtn.onclick=()=>{stopStream();};
+function stopStream(){if(stream){stream.getTracks().forEach(t=>t.stop());}stream=null;trackRef=null;video.srcObject=null;startBtn.disabled=false;stopBtn.disabled=true;toggleMetricsBtn.disabled=true;snapshotBtn.disabled=true;metricsLoop=false;logEvent('Camera stopped','warn');}
+
+enumerateBtn.onclick=async()=>{try{const list=await navigator.mediaDevices.enumerateDevices();list.filter(d=>d.kind==='videoinput').forEach(d=>logEvent('Device '+(d.label||'(no label)')+' id='+d.deviceId));}catch(e){logEvent('Enumerate error '+e.message,'error')}};
+
+snapshotBtn.onclick=()=>{captureDiagnosticSnapshot('manual');};
+
+toggleMetricsBtn.onclick=()=>{metricsLoop=!metricsLoop;if(metricsLoop){logEvent('Metrics loop ON');metricsCycle();}else{logEvent('Metrics loop OFF');}}
+
+function waitMetadata(){return new Promise(res=>{if(video.readyState>=1) return res();video.onloadedmetadata=()=>res();});}
+
+function bindTrackEvents(track){if(!track) return;track.onended=()=>logEvent('Track ended','error');track.onmute=()=>logEvent('Track muted','warn');track.onunmute=()=>logEvent('Track unmuted','ok');}
+
+function scheduleFrame(){if(!stream||!rVFC_supported) return;video.requestVideoFrameCallback((now,meta)=>{frameCount++;const dt=now-lastFrameTs;frameIntervals.push(dt);if(frameIntervals.length>200) frameIntervals.shift();lastFrameTs=now;lastVideoTime=meta.mediaTime;stalledMs=performance.now()-(now); // use callback arrival timing
+if(stalledMs>freezeThresholdMs){captureDiagnosticSnapshot('rVFC_stall');}
+if(stream) scheduleFrame();});}
+
+function legacyFrameLoop(){if(!stream||rVFC_supported) return;const now=performance.now();if(video.currentTime!==lastVideoTime){lastVideoTime=video.currentTime;stalledMs=0;}else{stalledMs+=16;}if(stalledMs>freezeThresholdMs){captureDiagnosticSnapshot('legacy_stall');}
+if(stream) requestAnimationFrame(legacyFrameLoop);}
+
+function metricsCycle(){if(!metricsLoop) return;updateStats();setTimeout(metricsCycle,1000);} 
+
+function percentile(arr,p){if(!arr.length) return 0;const sorted=[...arr].sort((a,b)=>a-b);const idx=Math.min(sorted.length-1,Math.floor(p*sorted.length));return sorted[idx];}
+
+function updateStats(){const settings=trackRef&&trackRef.getSettings?trackRef.getSettings():{};lastSettings=settings;const fpsEstimate=frameIntervals.length?1000/percentile(frameIntervals,0.5):0;const p90=percentile(frameIntervals,0.9).toFixed(1);const p99=percentile(frameIntervals,0.99).toFixed(1);statsEl.textContent=`ReadyState: ${video.readyState}\nTrack: ${trackRef?trackRef.readyState:'none'} muted=${trackRef?trackRef.muted:false}\nDims(video): ${video.videoWidth}x${video.videoHeight}\nSettings: ${JSON.stringify(settings)}\nFrames: ${frameCount}  EstFPS~${fpsEstimate.toFixed(1)}  p90dt=${p90}ms p99dt=${p99}ms\nStalledMs(detector): ${stalledMs.toFixed(0)} threshold=${freezeThresholdMs}\nLongTasks(>100ms): ${longTasks.filter(t=>t.duration>100).length}`;}
+
+function captureDiagnosticSnapshot(reason){const settings=trackRef&&trackRef.getSettings?trackRef.getSettings():{};const constraints=trackRef&&trackRef.getConstraints?trackRef.getConstraints():{};const snap={ts:new Date().toISOString(),reason,readyState:video.readyState,trackState:trackRef?trackRef.readyState:'none',muted:trackRef?trackRef.muted:false,videoDims:`${video.videoWidth}x${video.videoHeight}`,settings,constraints,frames:frameCount,lastFrameInterval:frameIntervals[frameIntervals.length-1],medianInterval:percentile(frameIntervals,0.5),p90Interval:percentile(frameIntervals,0.9),p99Interval:percentile(frameIntervals,0.99),longTasks:longTasks.slice(-5)};logEvent('SNAP '+reason+' '+JSON.stringify(snap),'warn');console.warn('CAMERA_SNAPSHOT',snap);}
+
+// Periodic snapshot if stalled but not yet recorded via frame callback
+setInterval(()=>{if(!stream) return;if(!rVFC_supported && stalledMs>freezeThresholdMs) captureDiagnosticSnapshot('timer_stall');updateStats();},2000);
+
+</script>
+</body>
+</html>

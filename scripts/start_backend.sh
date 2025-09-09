@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 echo "🚀 Starting Hand Tracking Backend..."
 echo "📋 API: http://localhost:8000"
 echo "🎯 Demo: http://localhost:8000/"
-echo "🔧 Debug Tool: http://localhost:8000/debug.html"
+echo "🌐 Main Demo: http://localhost:8000/"
 echo "📊 Health: http://localhost:8000/api/health"
 echo ""
 

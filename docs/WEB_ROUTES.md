@@ -1,4 +1,11 @@
-# 🌐 Web Application Routes & Testing
+# 🌐 We| Route | File | Description | Status |
+|-------|------|-------------|---------|
+| `/web` | `frontend/web/web_interface.html` | Main web interface | ✅ Fixed |
+| `/demo` | `frontend/demo.html` | Main demo (Chrome-safe) | ✅ Updated |
+| `/demo.html` | `frontend/demo.html` | Main demo (alt route) | ✅ Updated |
+| `/react-demo` | `frontend/demo.html` | Main demo (alt route) | ✅ Updated |
+| `/legacy-demo` | `frontend/demos/legacy_demo.html` | Legacy demo (to be removed) | ✅ New |
+| `/so101-simulation` | `frontend/web/web_interface.html` | Web interface (alt route) | ✅ Fixed |ation Routes & Testing
 
 ## 🚀 **Working Routes (Fixed & Verified)**
 
@@ -26,8 +33,8 @@ When running `python main.py --dev` (Frontend server on port 3000):
 | URL | File | Description |
 |-----|------|-------------|
 | `http://localhost:3000/index.html` | `frontend/index.html` | Main dashboard |
-| `http://localhost:3000/demos/chrome_safe_demo.html` | Chrome-safe demo | Recommended for testing |
-| `http://localhost:3000/demos/legacy_demo.html` | Original demo | Your old `demo.html` |
+| `http://localhost:3000/demo.html` | Main demo (Chrome-safe) | **Primary demo for testing** |
+| `http://localhost:3000/demos/legacy_demo.html` | Legacy demo | Original demo (to be removed) |
 | `http://localhost:3000/web/web_interface.html` | Main web interface | Full feature set |
 
 ## 🧪 **Testing Web Application**
@@ -57,9 +64,10 @@ curl -I http://localhost:8000/demo.html
 ```
 frontend/
 ├── index.html                    # Main dashboard
+├── demo.html                     # Main demo (Chrome-safe version) ⭐
 ├── demos/
-│   ├── chrome_safe_demo.html     # Chrome-optimized demo
-│   └── legacy_demo.html          # Original demo.html (renamed)
+│   ├── chrome_safe_demo.html     # Source for main demo
+│   └── legacy_demo.html          # Original demo (to be removed)
 ├── web/
 │   └── web_interface.html        # Main web interface
 └── diagnostics/

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Chrome-Safe Camera Demo</title>
+<style>
+body{background:#1a1a1a;color:#fff;font-family:monospace;padding:20px;margin:0}
+.warning{background:#8b0000;padding:15px;border-radius:8px;margin:20px 0;border-left:5px solid #ff0000}
+.chrome-warning{background:#1e40af;padding:15px;border-radius:8px;margin:20px 0;border-left:5px solid #3b82f6}
+button{padding:10px 20px;margin:10px 5px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer}
+button:disabled{background:#666;cursor:not-allowed}
+#log{background:#000;padding:10px;border-radius:4px;height:150px;overflow-y:auto;font-size:12px;margin:10px 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+video{border:2px solid #666;background:#000}
+</style>
+</head>
+<body>
+<h1>🛡️ Chrome-Safe Camera Demo</h1>
+
+<div id="browserWarning" class="chrome-warning" style="display:none">
+<strong>⚠️ Chrome Browser Detected</strong><br>
+This demo uses Chrome-safe operations only. No canvas operations, minimal resource usage.
+For full features, consider using Firefox.
+</div>
+
+<div class="warning">
+<strong>Chrome-Safe Features:</strong>
+<ul>
+<li>✅ Video display only (no frame capture)</li>
+<li>✅ WebSocket connection to backend</li>
+<li>✅ No canvas operations (prevents Chrome bug)</li>
+<li>✅ Automatic cleanup and timeouts</li>
+</ul>
+</div>
+
+<div class="grid">
+<div>
+<h3>Camera Feed</h3>
+<video id="video" width="400" height="300" autoplay muted playsinline></video>
+<div>
+<button id="startBtn">Start Camera</button>
+<button id="stopBtn" disabled>Stop Camera</button>
+<button id="connectWS" disabled>Connect WebSocket</button>
+<button id="disconnectWS" disabled>Disconnect</button>
+</div>
+<div>Status: <span id="status">Stopped</span></div>
+</div>
+
+<div>
+<h3>Safe Mode Log</h3>
+<div id="log">Chrome-safe mode initialized...<br></div>
+</div>
+</div>
+
+<script>
+let stream = null;
+let ws = null;
+let video = document.getElementById('video');
+let isChrome = /Chrome/.test(navigator.userAgent) && !/Edg|Firefox/.test(navigator.userAgent);
+
+if (isChrome) {
+    document.getElementById('browserWarning').style.display = 'block';
+    log('Chrome detected - using safe mode operations only');
+}
+
+function log(msg) {
+    const logEl = document.getElementById('log');
+    const timestamp = new Date().toLocaleTimeString();
+    logEl.innerHTML += `[${timestamp}] ${msg}<br>`;
+    logEl.scrollTop = logEl.scrollHeight;
+    console.log('[SAFE_MODE]', msg);
+}
+
+function updateStatus(text) {
+    document.getElementById('status').textContent = text;
+}
+
+// CHROME-SAFE: No canvas operations, just basic video display
+document.getElementById('startBtn').onclick = async () => {
+    try {
+        log('Starting camera (Chrome-safe mode)...');
+        
+        // Conservative constraints to avoid Chrome issues
+        const constraints = {
+            video: {
+                width: { ideal: 640, max: 640 },
+                height: { ideal: 480, max: 480 },
+                frameRate: { ideal: 15, max: 15 }
+            }
+        };
+        
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+        
+        await new Promise(resolve => {
+            video.onloadedmetadata = resolve;
+        });
+        
+        await video.play();
+        
+        updateStatus('Camera Active (Safe Mode)');
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('stopBtn').disabled = false;
+        document.getElementById('connectWS').disabled = false;
+        
+        log('✅ Camera started successfully - no frame processing');
+        
+        // Auto-cleanup after 5 minutes (safety measure)
+        setTimeout(() => {
+            log('⏰ Auto-cleanup after 5 minutes');
+            stopCamera();
+        }, 5 * 60 * 1000);
+        
+    } catch (error) {
+        log(`❌ Camera error: ${error.message}`);
+        updateStatus('Camera Error');
+    }
+};
+
+function stopCamera() {
+    if (stream) {
+        stream.getTracks().forEach(track => {
+            log(`Stopping track: ${track.kind}`);
+            track.stop();
+        });
+        stream = null;
+    }
+    
+    video.srcObject = null;
+    updateStatus('Stopped');
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = true;
+    document.getElementById('connectWS').disabled = true;
+    
+    if (ws) {
+        ws.close();
+        ws = null;
+        document.getElementById('disconnectWS').disabled = true;
+    }
+    
+    log('🛡️ Complete cleanup performed');
+}
+
+document.getElementById('stopBtn').onclick = stopCamera;
+
+// CHROME-SAFE: WebSocket without frame streaming
+document.getElementById('connectWS').onclick = () => {
+    try {
+        const wsUrl = 'ws://localhost:8000/api/tracking/live';
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+            log('✅ WebSocket connected (no frame streaming in safe mode)');
+            updateStatus('Camera + WebSocket Active');
+            document.getElementById('connectWS').disabled = true;
+            document.getElementById('disconnectWS').disabled = false;
+            
+            // Send ping messages instead of frames (Chrome-safe)
+            setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 1000);
+        };
+        
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'pong') {
+                    log('📡 WebSocket ping successful');
+                }
+            } catch (e) {
+                log(`WebSocket message error: ${e.message}`);
+            }
+        };
+        
+        ws.onclose = () => {
+            log('🔌 WebSocket disconnected');
+            document.getElementById('connectWS').disabled = false;
+            document.getElementById('disconnectWS').disabled = true;
+        };
+        
+        ws.onerror = (error) => {
+            log(`❌ WebSocket error: ${error}`);
+        };
+        
+    } catch (error) {
+        log(`❌ WebSocket connection error: ${error.message}`);
+    }
+};
+
+document.getElementById('disconnectWS').onclick = () => {
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+};
+
+// Emergency cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    log('🚨 Page unload - emergency cleanup');
+    stopCamera();
+});
+
+// Prevent right-click context menu that might interfere
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+log('🛡️ Chrome-safe camera demo ready');
+log(`Browser: ${navigator.userAgent.split(' ')[0]} (Safe mode: ${isChrome ? 'ON' : 'OFF'})`);
+</script>
+</body>
+</html>

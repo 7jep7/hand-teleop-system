@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Teleop System - Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        .header {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #60a5fa;
+            margin-bottom: 0.25rem;
+        }
+        
+        .header p {
+            color: #94a3b8;
+            font-size: 0.875rem;
+        }
+        
+        .container {
+            padding: 2rem;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .browser-warning {
+            background: linear-gradient(90deg, #dc2626, #ef4444);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            display: none;
+        }
+        
+        .camera-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .camera-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .camera-panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6, #06b6d4);
+        }
+        
+        .camera-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+        
+        .camera-title h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+        
+        .status-indicator {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .status-active {
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        
+        .status-inactive {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        
+        .status-processing {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4/3;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+            background: #000;
+        }
+        
+        video, canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        
+        .video-overlay {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            right: 8px;
+            bottom: 8px;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        
+        .overlay-info {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            color: #fff;
+            align-self: flex-start;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        
+        .btn-secondary {
+            background: rgba(148, 163, 184, 0.2);
+            color: #e2e8f0;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            background: rgba(148, 163, 184, 0.3);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(90deg, #ef4444, #dc2626);
+            color: white;
+        }
+        
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+        
+        .analytics-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 1.5rem;
+            position: relative;
+        }
+        
+        .analytics-panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .metric-card {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #60a5fa;
+            margin-bottom: 0.25rem;
+        }
+        
+        .metric-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .debug-output {
+            background: #000;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'Fira Code', 'SF Mono', monospace;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            height: 200px;
+            overflow-y: auto;
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+        
+        .debug-output::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .debug-output::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+        
+        .debug-output::-webkit-scrollbar-thumb {
+            background: rgba(34, 197, 94, 0.5);
+            border-radius: 3px;
+        }
+        
+        .settings-panel {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+        
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        
+        .setting-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .setting-group label {
+            font-size: 0.875rem;
+            color: #e2e8f0;
+            font-weight: 500;
+        }
+        
+        .setting-group select,
+        .setting-group input {
+            padding: 0.5rem;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #f8fafc;
+            font-size: 0.875rem;
+        }
+        
+        .setting-group select:focus,
+        .setting-group input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        @media (max-width: 768px) {
+            .camera-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 1rem;
+            }
+            
+            .header {
+                padding: 1rem;
+            }
+        }
+        
+        .hand-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .hand-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: pulse 2s infinite;
+        }
+        
+        .hand-indicator.detected {
+            background: #22c55e;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .grip-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.25rem;
+        }
+        
+        .grip-indicator {
+            padding: 0.125rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .grip-open {
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ade80;
+        }
+        
+        .grip-closed {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🤖 Hand Teleop System - Demo</h1>
+        <p>Dual camera feeds with real-time hand tracking analysis</p>
+    </div>
+
+    <div id="browserWarning" class="browser-warning">
+        <strong>⚠️ Chrome Browser Detected</strong><br>
+        Chrome may have camera stability issues. Firefox is recommended for optimal performance.
+    </div>
+
+    <div class="container">
+        <!-- Dual Camera Feeds -->
+        <div class="camera-grid">
+            <!-- Raw Camera Feed -->
+            <div class="camera-panel">
+                <div class="camera-title">
+                    <h3>📹 Raw Camera Feed</h3>
+                    <div id="rawStatus" class="status-indicator status-inactive">Inactive</div>
+                </div>
+                <div class="video-container">
+                    <video id="rawVideo" autoplay muted playsinline></video>
+                    <div class="video-overlay">
+                        <div class="overlay-info">
+                            <div>Resolution: <span id="rawResolution">-</span></div>
+                            <div>FPS: <span id="rawFPS">0</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="controls">
+                    <button id="startCamera" class="btn btn-primary">
+                        <span>📷</span> Start Camera
+                    </button>
+                    <button id="stopCamera" class="btn btn-danger" disabled>
+                        <span>⏹️</span> Stop Camera
+                    </button>
+                </div>
+            </div>
+
+            <!-- Processed Feed with Overlays -->
+            <div class="camera-panel">
+                <div class="camera-title">
+                    <h3>🎯 Hand Tracking Feed</h3>
+                    <div id="processedStatus" class="status-indicator status-inactive">Inactive</div>
+                </div>
+                <div class="video-container">
+                    <canvas id="processedCanvas"></canvas>
+                    <div class="video-overlay">
+                        <div class="overlay-info">
+                            <div>Tracking: <span id="trackingMode">-</span></div>
+                            <div>Latency: <span id="processingLatency">0ms</span></div>
+                            <div class="hand-status">
+                                <div id="handIndicator" class="hand-indicator"></div>
+                                <span id="handDetected">No Hand</span>
+                            </div>
+                            <div class="grip-status">
+                                <span>Grip:</span>
+                                <div id="gripIndicator" class="grip-indicator grip-open">Open</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="controls">
+                    <button id="connectWS" class="btn btn-primary" disabled>
+                        <span>🔗</span> Connect WebSocket
+                    </button>
+                    <button id="disconnectWS" class="btn btn-danger" disabled>
+                        <span>🔌</span> Disconnect
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Panel -->
+        <div class="analytics-panel">
+            <h3 style="margin-bottom: 1rem; color: #f59e0b;">📊 Analytics & Debug Info</h3>
+            
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div id="overallFPS" class="metric-value">0</div>
+                    <div class="metric-label">Overall FPS</div>
+                </div>
+                <div class="metric-card">
+                    <div id="handsDetected" class="metric-value">0</div>
+                    <div class="metric-label">Hands Detected</div>
+                </div>
+                <div class="metric-card">
+                    <div id="messagesProcessed" class="metric-value">0</div>
+                    <div class="metric-label">Messages</div>
+                </div>
+                <div class="metric-card">
+                    <div id="wsConnections" class="metric-value">0</div>
+                    <div class="metric-label">WS Connections</div>
+                </div>
+                <div class="metric-card">
+                    <div id="jointPositions" class="metric-value">0</div>
+                    <div class="metric-label">Joint Positions</div>
+                </div>
+                <div class="metric-card">
+                    <div id="avgLatency" class="metric-value">0ms</div>
+                    <div class="metric-label">Avg Latency</div>
+                </div>
+            </div>
+
+            <div class="debug-output" id="debugOutput">
+                <div style="color: #60a5fa;">Hand Teleop Testing Interface - Debug Console</div>
+                <div style="color: #94a3b8;">Waiting for camera initialization...</div>
+            </div>
+        </div>
+
+        <!-- Settings Panel -->
+        <div class="settings-panel">
+            <h3 style="margin-bottom: 1rem; color: #8b5cf6;">⚙️ Settings</h3>
+            
+            <div class="settings-grid">
+                <div class="setting-group">
+                    <label>Backend URL</label>
+                    <select id="backendSelect">
+                        <option value="local">Local (localhost:8000)</option>
+                        <option value="deployed">Deployed Backend</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>Tracking Mode</label>
+                    <select id="trackingModeSelect">
+                        <option value="mediapipe">MediaPipe</option>
+                        <option value="wilor">WILOR</option>
+                        <option value="apriltag">AprilTag</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>Send FPS</label>
+                    <input type="range" id="sendFPSSlider" min="5" max="30" value="15">
+                    <span id="sendFPSValue">15 FPS</span>
+                </div>
+                <div class="setting-group">
+                    <label>Quality</label>
+                    <select id="qualitySelect">
+                        <option value="80">High (80%)</option>
+                        <option value="60">Medium (60%)</option>
+                        <option value="40">Low (40%)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let video = null;
+        let canvas = null;
+        let ctx = null;
+        let stream = null;
+        let ws = null;
+        let isStreaming = false;
+        let sendingFrames = false;
+        let messageCount = 0;
+        let handCount = 0;
+        let fpsCount = 0;
+        let lastFrameTime = 0;
+        let latencySum = 0;
+        let latencyCount = 0;
+        
+        // Settings
+        let targetFPS = 15;
+        let trackingMode = 'mediapipe';
+        let backendURL = 'ws://localhost:8000';
+        let imageQuality = 80;
+        
+        // Elements
+        const elements = {
+            rawVideo: document.getElementById('rawVideo'),
+            processedCanvas: document.getElementById('processedCanvas'),
+            startCamera: document.getElementById('startCamera'),
+            stopCamera: document.getElementById('stopCamera'),
+            connectWS: document.getElementById('connectWS'),
+            disconnectWS: document.getElementById('disconnectWS'),
+            rawStatus: document.getElementById('rawStatus'),
+            processedStatus: document.getElementById('processedStatus'),
+            debugOutput: document.getElementById('debugOutput')
+        };
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeInterface();
+            setupEventListeners();
+            checkBrowserCompatibility();
+        });
+        
+        function initializeInterface() {
+            video = elements.rawVideo;
+            canvas = elements.processedCanvas;
+            ctx = canvas.getContext('2d');
+            
+            // Set canvas size
+            canvas.width = 400;
+            canvas.height = 300;
+            
+            logDebug('Interface initialized');
+        }
+        
+        function setupEventListeners() {
+            elements.startCamera.addEventListener('click', startCamera);
+            elements.stopCamera.addEventListener('click', stopCamera);
+            elements.connectWS.addEventListener('click', connectWebSocket);
+            elements.disconnectWS.addEventListener('click', disconnectWebSocket);
+            
+            // Settings
+            document.getElementById('backendSelect').addEventListener('change', updateBackendURL);
+            document.getElementById('trackingModeSelect').addEventListener('change', updateTrackingMode);
+            document.getElementById('sendFPSSlider').addEventListener('input', updateSendFPS);
+            document.getElementById('qualitySelect').addEventListener('change', updateQuality);
+        }
+        
+        function checkBrowserCompatibility() {
+            const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+            if (isChrome) {
+                document.getElementById('browserWarning').style.display = 'block';
+                logDebug('Chrome browser detected - showing compatibility warning');
+            }
+        }
+        
+        async function startCamera() {
+            try {
+                logDebug('Starting camera...');
+                
+                const constraints = {
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        frameRate: { ideal: 30 }
+                    },
+                    audio: false
+                };
+                
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    const resolution = `${video.videoWidth}x${video.videoHeight}`;
+                    document.getElementById('rawResolution').textContent = resolution;
+                    logDebug(`Camera started: ${resolution}`);
+                };
+                
+                updateStatus('rawStatus', 'Active', 'status-active');
+                elements.startCamera.disabled = true;
+                elements.stopCamera.disabled = false;
+                elements.connectWS.disabled = false;
+                
+                startFPSCounter();
+                
+            } catch (error) {
+                logDebug(`Camera error: ${error.message}`, 'error');
+                updateStatus('rawStatus', 'Error', 'status-inactive');
+            }
+        }
+        
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            
+            video.srcObject = null;
+            updateStatus('rawStatus', 'Inactive', 'status-inactive');
+            elements.startCamera.disabled = false;
+            elements.stopCamera.disabled = true;
+            elements.connectWS.disabled = true;
+            
+            if (ws) {
+                disconnectWebSocket();
+            }
+            
+            logDebug('Camera stopped');
+        }
+        
+        async function connectWebSocket() {
+            try {
+                const wsURL = `${backendURL}/api/tracking/live`;
+                logDebug(`Connecting to WebSocket: ${wsURL}`);
+                
+                ws = new WebSocket(wsURL);
+                
+                ws.onopen = () => {
+                    logDebug('WebSocket connected');
+                    updateStatus('processedStatus', 'Connected', 'status-active');
+                    elements.connectWS.disabled = true;
+                    elements.disconnectWS.disabled = false;
+                    updateMetric('wsConnections', '1');
+                    startSendingFrames();
+                };
+                
+                ws.onmessage = (event) => {
+                    handleWebSocketMessage(event.data);
+                };
+                
+                ws.onclose = () => {
+                    logDebug('WebSocket disconnected');
+                    updateStatus('processedStatus', 'Disconnected', 'status-inactive');
+                    elements.connectWS.disabled = false;
+                    elements.disconnectWS.disabled = true;
+                    updateMetric('wsConnections', '0');
+                    sendingFrames = false;
+                };
+                
+                ws.onerror = (error) => {
+                    logDebug(`WebSocket error: ${error}`, 'error');
+                    updateStatus('processedStatus', 'Error', 'status-inactive');
+                };
+                
+            } catch (error) {
+                logDebug(`WebSocket connection error: ${error.message}`, 'error');
+            }
+        }
+        
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            sendingFrames = false;
+        }
+        
+        function startSendingFrames() {
+            if (!sendingFrames && ws && ws.readyState === WebSocket.OPEN) {
+                sendingFrames = true;
+                sendFrame();
+            }
+        }
+        
+        function sendFrame() {
+            if (!sendingFrames || !ws || ws.readyState !== WebSocket.OPEN) {
+                return;
+            }
+            
+            try {
+                // Capture frame from video
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = video.videoWidth;
+                tempCanvas.height = video.videoHeight;
+                
+                tempCtx.drawImage(video, 0, 0);
+                const imageData = tempCanvas.toDataURL('image/jpeg', imageQuality / 100);
+                
+                const message = {
+                    type: 'image',
+                    data: imageData,
+                    tracking_mode: trackingMode,
+                    timestamp: Date.now()
+                };
+                
+                ws.send(JSON.stringify(message));
+                
+            } catch (error) {
+                logDebug(`Frame send error: ${error.message}`, 'error');
+            }
+            
+            // Schedule next frame
+            setTimeout(() => sendFrame(), 1000 / targetFPS);
+        }
+        
+        function handleWebSocketMessage(data) {
+            try {
+                const message = JSON.parse(data);
+                
+                if (message.type === 'tracking_result') {
+                    processTrackingResult(message.data);
+                }
+                
+                messageCount++;
+                updateMetric('messagesProcessed', messageCount.toString());
+                
+            } catch (error) {
+                logDebug(`Message parse error: ${error.message}`, 'error');
+            }
+        }
+        
+        function processTrackingResult(data) {
+            // Update metrics
+            if (data.hand_detected) {
+                handCount++;
+                updateHandStatus(true);
+                updateGripStatus(data.hand_pose);
+            } else {
+                updateHandStatus(false);
+            }
+            
+            updateMetric('handsDetected', handCount.toString());
+            updateMetric('jointPositions', data.hand_pose?.landmarks?.length || '0');
+            
+            // Update latency
+            if (data.processing_time_ms) {
+                latencySum += data.processing_time_ms;
+                latencyCount++;
+                const avgLatency = Math.round(latencySum / latencyCount);
+                updateMetric('avgLatency', `${avgLatency}ms`);
+                document.getElementById('processingLatency').textContent = `${Math.round(data.processing_time_ms)}ms`;
+            }
+            
+            // Update tracking mode display
+            document.getElementById('trackingMode').textContent = data.tracking_mode || trackingMode;
+            
+            // Draw processed frame
+            if (data.annotated_frame) {
+                drawProcessedFrame(data.annotated_frame);
+            }
+            
+            // Log debug info
+            logDebug(`Processed: Hand=${data.hand_detected}, Mode=${data.tracking_mode}, Time=${Math.round(data.processing_time_ms)}ms`);
+        }
+        
+        function drawProcessedFrame(base64Image) {
+            const img = new Image();
+            img.onload = () => {
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            };
+            img.src = base64Image;
+        }
+        
+        function updateHandStatus(detected) {
+            const indicator = document.getElementById('handIndicator');
+            const text = document.getElementById('handDetected');
+            
+            if (detected) {
+                indicator.classList.add('detected');
+                text.textContent = 'Hand Detected';
+            } else {
+                indicator.classList.remove('detected');
+                text.textContent = 'No Hand';
+            }
+        }
+        
+        function updateGripStatus(handPose) {
+            const indicator = document.getElementById('gripIndicator');
+            
+            if (!handPose || !handPose.landmarks) {
+                indicator.className = 'grip-indicator grip-open';
+                indicator.textContent = 'Open';
+                return;
+            }
+            
+            // Simple grip detection based on thumb-index distance
+            const landmarks = handPose.landmarks;
+            if (landmarks.length >= 9) {
+                const thumbTip = landmarks[4];
+                const indexTip = landmarks[8];
+                
+                const distance = Math.sqrt(
+                    Math.pow(thumbTip.x - indexTip.x, 2) + 
+                    Math.pow(thumbTip.y - indexTip.y, 2)
+                );
+                
+                const isGripClosed = distance < 0.05; // Threshold for closed grip
+                
+                if (isGripClosed) {
+                    indicator.className = 'grip-indicator grip-closed';
+                    indicator.textContent = 'Closed';
+                } else {
+                    indicator.className = 'grip-indicator grip-open';
+                    indicator.textContent = 'Open';
+                }
+            }
+        }
+        
+        function startFPSCounter() {
+            let frameCount = 0;
+            let lastTime = performance.now();
+            
+            function countFPS() {
+                frameCount++;
+                const currentTime = performance.now();
+                
+                if (currentTime - lastTime >= 1000) {
+                    const fps = Math.round(frameCount * 1000 / (currentTime - lastTime));
+                    document.getElementById('rawFPS').textContent = fps;
+                    updateMetric('overallFPS', fps.toString());
+                    
+                    frameCount = 0;
+                    lastTime = currentTime;
+                }
+                
+                if (isStreaming || stream) {
+                    requestAnimationFrame(countFPS);
+                }
+            }
+            
+            isStreaming = true;
+            requestAnimationFrame(countFPS);
+        }
+        
+        function updateStatus(elementId, text, className) {
+            const element = document.getElementById(elementId);
+            element.textContent = text;
+            element.className = `status-indicator ${className}`;
+        }
+        
+        function updateMetric(elementId, value) {
+            document.getElementById(elementId).textContent = value;
+        }
+        
+        function logDebug(message, type = 'info') {
+            const output = elements.debugOutput;
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#ef4444' : '#22c55e';
+            
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span style="color: #94a3b8;">[${timestamp}]</span> <span style="color: ${color};">${message}</span>`;
+            
+            output.appendChild(logEntry);
+            output.scrollTop = output.scrollHeight;
+            
+            // Keep only last 100 entries
+            while (output.children.length > 100) {
+                output.removeChild(output.firstChild);
+            }
+        }
+        
+        // Settings handlers
+        function updateBackendURL() {
+            const select = document.getElementById('backendSelect');
+            backendURL = select.value === 'local' ? 'ws://localhost:8000' : 'wss://hand-teleop-api.onrender.com';
+            logDebug(`Backend URL updated: ${backendURL}`);
+        }
+        
+        function updateTrackingMode() {
+            trackingMode = document.getElementById('trackingModeSelect').value;
+            logDebug(`Tracking mode updated: ${trackingMode}`);
+        }
+        
+        function updateSendFPS() {
+            const slider = document.getElementById('sendFPSSlider');
+            targetFPS = parseInt(slider.value);
+            document.getElementById('sendFPSValue').textContent = `${targetFPS} FPS`;
+            logDebug(`Send FPS updated: ${targetFPS}`);
+        }
+        
+        function updateQuality() {
+            imageQuality = parseInt(document.getElementById('qualitySelect').value);
+            logDebug(`Image quality updated: ${imageQuality}%`);
+        }
+    </script>
+</body>
+</html>
