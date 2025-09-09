@@ -267,19 +267,27 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 # SO-101 Robot Simulation
-try:
-    from core.robot_control.so101_simulation import get_simulation
-    so101_sim = get_simulation()
-    so101_available = True
-    print("✅ SO-101 simulation initialized")
-except Exception as e:
-    import traceback
-    print(f"⚠️  SO-101 simulation not available: {e}")
-    print(f"sys.path: {sys.path}")
-    print(f"cwd: {os.getcwd()}")
-    print(traceback.format_exc())
+disable_so101 = os.getenv("DISABLE_SO101", "false").lower() == "true"
+deployment_mode = os.getenv("DEPLOYMENT_MODE", "false").lower() == "true"
+
+if disable_so101 or deployment_mode:
+    print("⚠️  SO-101 simulation disabled (deployment mode)")
     so101_available = False
     so101_sim = None
+else:
+    try:
+        from core.robot_control.so101_simulation import get_simulation
+        so101_sim = get_simulation()
+        so101_available = True
+        print("✅ SO-101 simulation initialized")
+    except Exception as e:
+        import traceback
+        print(f"⚠️  SO-101 simulation not available: {e}")
+        print(f"sys.path: {sys.path}")
+        print(f"cwd: {os.getcwd()}")
+        print(traceback.format_exc())
+        so101_available = False
+        so101_sim = None
 
 # ==================== SO-101 ROBOT API ENDPOINTS ====================
 

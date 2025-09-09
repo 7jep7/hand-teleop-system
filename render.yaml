@@ -13,3 +13,7 @@ services:
         value: 3.10
       - key: DISABLE_WILOR
         value: "true"
+      - key: DISABLE_SO101
+        value: "true"
+      - key: DEPLOYMENT_MODE
+        value: "true"
